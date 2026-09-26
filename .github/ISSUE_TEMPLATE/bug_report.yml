@@ -25,7 +25,7 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: jev-rag 0.2.0
+      placeholder: jev-rag 0.3.0
     validations:
       required: true
   - type: textarea
