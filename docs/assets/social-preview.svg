@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Jev RAG social preview</title>
+  <desc id="desc">Vector-free local RAG with SQLite BM25, Jev reranking, and grounded LLM answers.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f7f2"/>
+      <stop offset="1" stop-color="#edf5f0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#0f3d31" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1160" cy="-40" r="230" fill="#dcebe3"/>
+  <circle cx="70" cy="660" r="210" fill="#e5eee9"/>
+
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+    <rect x="72" y="72" width="218" height="38" rx="19" fill="#d8e9e0"/>
+    <text x="181" y="97" text-anchor="middle" font-size="16" font-weight="700" letter-spacing="1.6" fill="#175f4d">VECTOR-FREE LOCAL RAG</text>
+
+    <text x="72" y="206" font-family="Georgia, 'Times New Roman', serif" font-size="88" font-weight="700" fill="#12251f">Jev RAG</text>
+    <text x="72" y="265" font-size="28" font-weight="600" fill="#385a50">Search local knowledge without embeddings</text>
+    <text x="72" y="306" font-size="22" fill="#5f746d">SQLite BM25 retrieval, Jev reranking, grounded streaming answers.</text>
+
+    <g transform="translate(72 365)">
+      <rect width="164" height="64" rx="16" fill="#ffffff" stroke="#c9d7d1"/>
+      <text x="82" y="39" text-anchor="middle" font-size="19" font-weight="700" fill="#24483d">Local files</text>
+      <path d="M180 32h38" stroke="#619081" stroke-width="3" stroke-linecap="round"/>
+      <path d="M210 24l9 8-9 8" fill="none" stroke="#619081" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="236" width="184" height="64" rx="16" fill="#ffffff" stroke="#c9d7d1"/>
+      <text x="328" y="39" text-anchor="middle" font-size="19" font-weight="700" fill="#24483d">FTS5 / BM25</text>
+      <path d="M436 32h38" stroke="#619081" stroke-width="3" stroke-linecap="round"/>
+      <path d="M466 24l9 8-9 8" fill="none" stroke="#619081" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="492" width="178" height="64" rx="16" fill="#17624f"/>
+      <text x="581" y="39" text-anchor="middle" font-size="19" font-weight="700" fill="#ffffff">Jev rerank</text>
+    </g>
+
+    <text x="72" y="495" font-size="19" font-weight="600" fill="#526b63">No vector database  •  No GPU  •  Local folder indexing  •  Cited answers</text>
+    <text x="72" y="566" font-size="18" font-weight="700" fill="#17624f">github.com/aifabrice/jev-rag</text>
+
+    <g transform="translate(810 132)" filter="url(#shadow)">
+      <rect width="398" height="376" rx="28" fill="#ffffff"/>
+      <circle cx="34" cy="32" r="5" fill="#d2ddd8"/>
+      <circle cx="52" cy="32" r="5" fill="#d2ddd8"/>
+      <circle cx="70" cy="32" r="5" fill="#d2ddd8"/>
+      <text x="32" y="94" font-size="30" font-family="Georgia, 'Times New Roman', serif" font-weight="700" fill="#12251f">Ask your documents</text>
+      <rect x="32" y="122" width="334" height="62" rx="14" fill="#f7f9f8" stroke="#d4dfda"/>
+      <text x="52" y="160" font-size="17" fill="#74857f">How long does a refund take?</text>
+      <rect x="32" y="216" width="98" height="76" rx="14" fill="#edf5f1"/>
+      <rect x="150" y="216" width="98" height="76" rx="14" fill="#edf5f1"/>
+      <rect x="268" y="216" width="98" height="76" rx="14" fill="#edf5f1"/>
+      <text x="81" y="246" text-anchor="middle" font-size="15" fill="#60766e">BM25</text>
+      <text x="81" y="273" text-anchor="middle" font-size="21" font-weight="700" fill="#17624f">12 ms</text>
+      <text x="199" y="246" text-anchor="middle" font-size="15" fill="#60766e">Jev</text>
+      <text x="199" y="273" text-anchor="middle" font-size="21" font-weight="700" fill="#17624f">rerank</text>
+      <text x="317" y="246" text-anchor="middle" font-size="15" fill="#60766e">Answer</text>
+      <text x="317" y="273" text-anchor="middle" font-size="21" font-weight="700" fill="#17624f">stream</text>
+      <path d="M32 330h240" stroke="#d8e2dd" stroke-width="9" stroke-linecap="round"/>
+      <path d="M32 350h192" stroke="#e5ebe8" stroke-width="9" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

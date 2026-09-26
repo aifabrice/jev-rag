@@ -2,7 +2,14 @@
 
 **Vector-free local knowledge search with SQLite BM25, Jev reranking, and grounded streaming answers.**
 
+[![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
+
 [简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
+![Jev RAG local web interface](docs/assets/demo-ui.png)
 
 ```text
 local files -> SQLite FTS5 / BM25 -> Jev relevance reranking -> MiniMax answer
@@ -23,6 +30,18 @@ Jev RAG indexes a local folder without embeddings or a vector database. It retri
 - Streaming grounded answers with numbered file citations.
 - SQLite caches and per-run latency, usage, and cost records.
 - Standard-library core; `pypdf` is optional for PDF extraction.
+
+## How it differs from vector RAG
+
+| | Jev RAG | Typical vector RAG |
+|---|---|---|
+| First-stage retrieval | SQLite FTS5/BM25 | Embedding similarity |
+| Extra infrastructure | None beyond SQLite | Embedding model and vector store |
+| Strongest queries | Exact terms, IDs, names, and domain language | Semantic similarity and paraphrases |
+| Second stage | Jev evidence reranking | Optional reranker |
+| Main trade-off | Lexical mismatch can miss synonyms | Embedding cost, indexing, and infrastructure |
+
+This is a deliberate retrieval architecture, not a claim that lexical search always beats embeddings. Measure it on your own documents and questions.
 
 ## Non-goals
 
@@ -184,6 +203,29 @@ python -m twine check dist/*
 ```
 
 Normal tests do not call paid APIs. Live calls are always explicit.
+
+## Reproducible evaluation
+
+Run the bundled BM25 smoke benchmark without paid API calls:
+
+```bash
+python scripts/benchmark.py
+```
+
+To compare the same questions after Jev reranking, explicitly opt in to provider calls:
+
+```bash
+python scripts/benchmark.py --use-jev --provider openrouter
+```
+
+See [Evaluation](docs/EVALUATION.md) for the JSONL format, metrics, limitations, and instructions for testing a private document collection.
+
+## Community and roadmap
+
+- Use [Discussions](https://github.com/aifabrice/jev-rag/discussions) for questions, use cases, and design ideas.
+- Use [Issues](https://github.com/aifabrice/jev-rag/issues) for reproducible bugs and scoped feature requests.
+- Good first contributions include OCR adapters, more document loaders, evaluation datasets, provider adapters, and packaging improvements.
+- Planned work is tracked in the [issue tracker](https://github.com/aifabrice/jev-rag/issues).
 
 ## Project maturity and naming
 

@@ -1,0 +1,4 @@
+{"query":"API Key 泄露到公开仓库后应该怎么处理？","expected_paths":["API_令牌.md"]}
+{"query":"导出十万行以上的报表会怎样？","expected_paths":["报表导出.md"]}
+{"query":"重复扣款的退款一般多久到账？","expected_paths":["退款与套餐.md"]}
+{"query":"绑定银行卡的验证扣款什么时候撤销？","expected_paths":["银行卡入账说明.md"]}

@@ -23,13 +23,15 @@ jobs:
       - name: Install project
         run: python -m pip install -e '.[dev,documents]'
       - name: Compile
-        run: python -m compileall -q local_kb.py jev_test.py tests
+        run: python -m compileall -q local_kb.py jev_test.py scripts tests
       - name: Check release for secrets and local files
         run: python scripts/check_release.py
       - name: Lint
         run: ruff check .
       - name: Test
         run: python -m unittest discover -s tests -v
+      - name: Run BM25 benchmark smoke test
+        run: python scripts/benchmark.py
       - name: Verify dry-run CLI
         run: jev-rag-smoke-test --dry-run
       - name: Build distributions

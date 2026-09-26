@@ -4,9 +4,7 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
-- Prepare the repository for a public open-source release.
-
-## [0.2.0] - 2026-09-25
+## [0.2.0] - 2026-09-26
 
 ### Added
 
@@ -18,6 +16,9 @@ All notable changes are documented here. The project follows Semantic Versioning
 - Jev network retries and concurrent batches of ten candidates.
 - Defaults of 30 BM25 candidates and 10 final evidence passages.
 - Optional Jev threshold for CLI and web-server workflows.
+- Repository screenshots and a social preview asset.
+- Reproducible BM25/Jev retrieval benchmark runner and evaluation guide.
+- English and Chinese project pages with architecture comparison and community guidance.
 
 ### Fixed
 

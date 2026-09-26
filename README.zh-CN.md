@@ -2,7 +2,14 @@
 
 **基于 SQLite BM25、Jev 重排与流式引用回答的无向量本地知识库。**
 
+[![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
+
 [English](README.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
+
+![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
 ```text
 本地文件 → SQLite FTS5 / BM25 → Jev 证据重排 → MiniMax 引用回答
@@ -23,6 +30,18 @@ Jev RAG 不需要 Embedding、向量数据库或 GPU。它扫描本地文件夹�
 - MiniMax 流式回答，并显示来源编号。
 - 页面展示 BM25、Jev、首 Token、生成和总耗时。
 - SQLite 保存索引、Jev 缓存和问答运行记录。
+
+## 与向量 RAG 的区别
+
+| | Jev RAG | 常规向量 RAG |
+|---|---|---|
+| 第一阶段检索 | SQLite FTS5/BM25 | Embedding 相似度 |
+| 额外基础设施 | SQLite 以外无 | Embedding 模型与向量库 |
+| 擅长的查询 | 准确术语、ID、名称和领域语言 | 语义相似与改写 |
+| 第二阶段 | Jev 证据重排 | 可选重排器 |
+| 主要取舍 | 同义词可能造成词汇失配 | Embedding 成本、建索引和运维 |
+
+这是一种有意识的检索架构选择，不是宣称关键词检索永远优于向量检索。请用自己的文档和问题进行测试。
 
 ## 安装
 
@@ -155,6 +174,29 @@ python -m twine check dist/*
 ```
 
 普通测试不会调用收费 API。
+
+## 可复现评测
+
+使用项目自带的公开示例文档运行 BM25 冒烟评测，不会调用收费 API：
+
+```bash
+python scripts/benchmark.py
+```
+
+如需对同一批问题比较 Jev 重排，需要显式启用服务商调用：
+
+```bash
+python scripts/benchmark.py --use-jev --provider openrouter
+```
+
+评测文件格式、指标和局限请参考 [Evaluation](docs/EVALUATION.md)。示例问题只用于验证评测链路，不代表真实业务性能。
+
+## 社区与路线图
+
+- 在 [Discussions](https://github.com/aifabrice/jev-rag/discussions) 交流使用场景、问题和设计想法。
+- 在 [Issues](https://github.com/aifabrice/jev-rag/issues) 提交可复现的缺陷和边界清晰的功能需求。
+- 适合首次贡献的方向包括 OCR 适配、更多文档加载器、评测数据集、模型服务商适配和打包改进。
+- 路线图在 [Issue 列表](https://github.com/aifabrice/jev-rag/issues) 中跟踪。
 
 ## 项目说明
 
