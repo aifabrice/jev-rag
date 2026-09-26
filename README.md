@@ -9,6 +9,8 @@
 
 [简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
+**[Explore the interactive public benchmark →](https://aifabrice.github.io/jev-rag/)**
+
 ## Public benchmark
 
 Complete BEIR NFCorpus test split: 3,633 documents and 323 queries. All rows

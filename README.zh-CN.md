@@ -9,6 +9,8 @@
 
 [English](README.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
 
+**[打开互动式公开 Benchmark →](https://aifabrice.github.io/jev-rag/)**
+
 ## 公开测评结果
 
 BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询。所有结果使用相同语料、
