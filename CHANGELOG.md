@@ -4,6 +4,8 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-26
+
 ### Added
 
 - Zero-configuration local-folder discovery: `serve` now indexes `~/Documents`
@@ -15,6 +17,7 @@ All notable changes are documented here. The project follows Semantic Versioning
 - Optional OpenRouter embeddings, local NumPy vector cache, and reciprocal-rank fusion before Jev.
 - BM25, Agentic, embedding/RRF, Jev, first-token, generation, and total latency reporting.
 - Complete NFCorpus Agentic and hybrid benchmark results with reproducible configurations.
+- Interactive public benchmark explorer deployed with GitHub Pages.
 
 ## [0.2.0] - 2026-09-26
 

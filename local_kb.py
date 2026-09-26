@@ -38,7 +38,7 @@ from xml.etree import ElementTree
 from jev_test import load_dotenv, request_decision
 
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 DEFAULT_GENERATOR_MODEL = "minimax/minimax-m3"
 DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
 DEFAULT_RETRIEVAL_MODE = "bm25"

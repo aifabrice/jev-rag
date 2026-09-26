@@ -210,7 +210,7 @@ def request_embeddings(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "jev-rag-hybrid-benchmark/0.2.0",
+            "User-Agent": "jev-rag-hybrid-benchmark/0.3.0",
             "X-Title": "Jev RAG Hybrid Benchmark",
         }
         payload: dict[str, Any] = {}

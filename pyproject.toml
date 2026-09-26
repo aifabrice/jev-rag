@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jev-rag"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local BM25, agentic lexical, or hybrid retrieval with Jev reranking and grounded answers."
 readme = "README.md"
 requires-python = ">=3.9"
