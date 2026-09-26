@@ -130,6 +130,34 @@ The same retrieval path is available in the application with
 application keeps `bm25` as its default, so installing the project does not
 silently create embeddings or send corpus text to an embedding provider.
 
+## Evaluate Agentic Search + Jev
+
+Agentic mode asks MiniMax for five lexical queries, runs them against the local
+FTS5 index, performs a second planning round over up to eight snippets, and
+fuses all lexical rankings before Jev. It does not create embeddings, but both
+the planner and Jev make paid provider calls. Start with a limited run:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 50 \
+  --agentic \
+  --agentic-rounds 2 \
+  --agentic-queries 5 \
+  --agentic-per-query-k 100 \
+  --agentic-domain-hint medical \
+  --use-jev \
+  --provider openrouter \
+  --limit-queries 10 \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-pilot.json
+```
+
+Remove `--limit-queries 10` for the complete 323-query run. Query plans and Jev
+judgments are cached locally. Official relevance judgments are used only after
+ranking to calculate metrics; they are never included in planner prompts. The
+`medical` domain hint is disclosed because NFCorpus is a medical collection;
+the application default is domain-neutral.
+
 ## Interpreting results
 
 - **Hit rate** answers whether at least one expected file appeared in the returned evidence.

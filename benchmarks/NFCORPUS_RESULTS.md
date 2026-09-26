@@ -118,6 +118,67 @@ reranking pipeline rather than a single embedding model, it has not been
 submitted through MTEB, and the top-50 choice was observed on the same test
 set. The comparison is disclosed only to give the score numerical context.
 
+## Agentic lexical search experiment
+
+The third application mode uses `minimax/minimax-m3` to plan local lexical
+searches without creating embeddings. The benchmark disclosed a `medical`
+domain hint because NFCorpus is a medical collection; the product default is
+domain-neutral. Round one generates five searches from
+the user query. Round two inspects up to eight first-round titles/snippets and
+generates five follow-up searches. The original query and generated searches
+each retrieve up to 100 local BM25 candidates; RRF (`k=60`) retains 50 for Jev.
+Official relevance judgments were never included in planner prompts.
+
+| Pipeline | nDCG@10 | MRR@10 | MAP@10 | Recall@10 | Recall@50 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BM25 top 50 | 0.305654 | 0.512697 | 0.218445 | 0.147309 | 0.209810 |
+| BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.270442 | 0.164474 | 0.209810 |
+| Agentic lexical top 50 | 0.380168 | 0.597940 | 0.275298 | 0.185464 | 0.280765 |
+| **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.327298** | **0.204138** | **0.280765** |
+| Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.337663 | 0.214907 | 0.318075 |
+
+Agentic + Jev improved nDCG@10 by 18.90% relative to BM25 top 50 +
+Jev. It finished 0.013358 (3.01%) below hybrid + Jev. A paired 20,000-sample
+query bootstrap estimated the Agentic-minus-Hybrid+Jev difference at
+`[-0.025480, -0.001697]` (95% interval). The result is therefore a strong
+no-vector alternative, not evidence that iterative lexical search has surpassed
+the best measured embedding pipeline.
+
+An oracle diagnostic sorted only the retrieved candidate pools by official
+relevance. Agentic top 50 reached an oracle nDCG@10 of `0.604524`, compared
+with `0.488842` for BM25 and `0.649287` for hybrid retrieval. This diagnostic
+is not a system score; it shows that both candidate recall and Jev ranking still
+have headroom.
+
+The complete planner run reported 317,865 prompt tokens, 17,279 completion
+tokens, and $0.105439 provider cost. The Jev pass reported 8,817,321 input
+tokens, 369,835 output tokens, and $0.370327 provider cost, for $0.475766
+combined planner + reranker cost. Estimated serial online latency was 7,516 ms
+median and 26,347 ms p95. Plans and reranks were cached while developing and
+resuming the run; latency and price remain provider-dependent observations.
+
+Reproduce the mode with:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 50 \
+  --agentic \
+  --agentic-model minimax/minimax-m3 \
+  --agentic-rounds 2 \
+  --agentic-queries 5 \
+  --agentic-per-query-k 100 \
+  --agentic-domain-hint medical \
+  --rrf-k 60 \
+  --use-jev \
+  --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-jev.json
+```
+
+Use `--limit-queries 10` for a lower-cost connectivity check before a full run.
+The compact machine-readable disclosure is stored in
+[`nfcorpus-agentic-summary.json`](nfcorpus-agentic-summary.json).
+
 ## Latency and provider usage
 
 | Mode | Median query latency | p95 query latency |

@@ -9,6 +9,7 @@ include Makefile
 include .env.example
 recursive-include docs *.md *.png *.svg
 recursive-include benchmarks *.jsonl
+recursive-include benchmarks *.json
 recursive-include knowledge *.md
 recursive-include tests *.py
 recursive-include scripts *.py

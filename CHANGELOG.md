@@ -9,10 +9,12 @@ All notable changes are documented here. The project follows Semantic Versioning
 - Zero-configuration local-folder discovery: `serve` now indexes `~/Documents`
   by default, keeps BM25 + Jev as the vector-free default, and excludes the
   source checkout when it is inside the discovered folder.
-- Selectable `bm25` and `hybrid` retrieval modes in the CLI, HTTP API, and web UI.
+- Selectable `bm25`, `agentic`, and `hybrid` retrieval modes in the CLI, HTTP API, and web UI.
+- Two-round MiniMax lexical query planning, multi-query RRF, local plan caching,
+  Agentic latency/cost records, and defensive planner-output validation.
 - Optional OpenRouter embeddings, local NumPy vector cache, and reciprocal-rank fusion before Jev.
-- BM25, embedding/RRF, Jev, first-token, generation, and total latency reporting.
-- Complete NFCorpus hybrid benchmark result and clearly qualified MTEB numerical context.
+- BM25, Agentic, embedding/RRF, Jev, first-token, generation, and total latency reporting.
+- Complete NFCorpus Agentic and hybrid benchmark results with reproducible configurations.
 
 ## [0.2.0] - 2026-09-26
 

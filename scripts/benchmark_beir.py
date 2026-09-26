@@ -28,7 +28,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from jev_test import load_dotenv  # noqa: E402
-from local_kb import KnowledgeBase, jev_rerank, make_snippet  # noqa: E402
+from local_kb import (  # noqa: E402
+    DEFAULT_AGENTIC_MODEL,
+    KnowledgeBase,
+    jev_rerank,
+    make_snippet,
+    retrieve_candidates,
+)
 
 
 DATASETS = {
@@ -424,6 +430,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--vector-top-k", type=int, default=50)
     parser.add_argument("--rrf-k", type=int, default=60)
+    parser.add_argument(
+        "--agentic",
+        action="store_true",
+        help="Enable two-round LLM-planned local lexical retrieval before Jev",
+    )
+    parser.add_argument("--agentic-model", default=DEFAULT_AGENTIC_MODEL)
+    parser.add_argument("--agentic-rounds", type=int, choices=[1, 2], default=2)
+    parser.add_argument("--agentic-queries", type=int, default=5)
+    parser.add_argument("--agentic-per-query-k", type=int, default=100)
+    parser.add_argument(
+        "--agentic-domain-hint",
+        help="Optional disclosed domain hint for the planner (for NFCorpus: medical)",
+    )
     parser.add_argument("--limit-queries", type=int, help="Deterministic prefix for a pilot run")
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
@@ -431,7 +450,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--cache-root", type=Path, default=ROOT / ".knowledge" / "public-benchmarks"
     )
     parser.add_argument("--output", type=Path, help="Write the complete machine-readable result")
-    parser.add_argument("--no-jev-cache", action="store_true")
+    parser.add_argument(
+        "--no-jev-cache",
+        action="store_true",
+        help="Ignore Jev and Agentic-plan caches",
+    )
     return parser
 
 
@@ -443,6 +466,8 @@ def main() -> int:
         raise SystemExit("--vector-top-k must be between 1 and 100")
     if args.rrf_k < 1:
         raise SystemExit("--rrf-k must be positive")
+    if args.agentic and args.embedding_model:
+        raise SystemExit("--agentic and --embedding-model are separate benchmark modes")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -464,6 +489,7 @@ def main() -> int:
     embedding_usage: dict[str, float] = {}
     embedding_index: dict[str, Any] | None = None
     embedding_queries: dict[str, Any] | None = None
+    agentic_usage: dict[str, float] = {}
     try:
         index_stats = kb.index("none")
         corpus_vectors = None
@@ -500,11 +526,31 @@ def main() -> int:
         for number, query_id in enumerate(query_ids, 1):
             query = queries[query_id]
             started = time.perf_counter()
-            try:
-                candidates = kb.lexical_search(query, args.top_k)
-            except ValueError:
-                candidates = []
-            retrieval_meta: dict[str, Any] = {"mode": "bm25"}
+            retrieval_meta: dict[str, Any]
+            if args.agentic:
+                candidates, retrieval_meta = retrieve_candidates(
+                    kb,
+                    query,
+                    retrieval_mode="agentic",
+                    agentic_model=args.agentic_model,
+                    agentic_rounds=args.agentic_rounds,
+                    agentic_queries=args.agentic_queries,
+                    agentic_per_query_k=args.agentic_per_query_k,
+                    agentic_top_k=args.top_k,
+                    agentic_domain_hint=args.agentic_domain_hint,
+                    rrf_k=args.rrf_k,
+                    timeout=args.timeout,
+                    use_cache=not args.no_jev_cache,
+                )
+                for key, value in ((retrieval_meta.get("agentic") or {}).get("usage") or {}).items():
+                    if isinstance(value, (int, float)):
+                        agentic_usage[key] = agentic_usage.get(key, 0.0) + float(value)
+            else:
+                try:
+                    candidates = kb.lexical_search(query, args.top_k)
+                except ValueError:
+                    candidates = []
+                retrieval_meta = {"mode": "bm25"}
             if args.embedding_model:
                 dense_ids = vector_rank(
                     query_vectors_by_id[query_id],
@@ -578,7 +624,11 @@ def main() -> int:
         "dataset": args.dataset,
         "split": args.split,
         "mode": (
-            f"bm25+embedding+rrf+jev:{args.provider}"
+            f"agentic-lexical-{args.agentic_rounds}round+jev:{args.provider}"
+            if args.agentic and args.use_jev
+            else f"agentic-lexical-{args.agentic_rounds}round"
+            if args.agentic
+            else f"bm25+embedding+rrf+jev:{args.provider}"
             if args.embedding_model and args.use_jev
             else "bm25+embedding+rrf"
             if args.embedding_model
@@ -589,7 +639,12 @@ def main() -> int:
         "top_k": args.top_k,
         "vector_top_k": args.vector_top_k if args.embedding_model else None,
         "embedding_model": args.embedding_model,
-        "rrf_k": args.rrf_k if args.embedding_model else None,
+        "rrf_k": args.rrf_k if args.embedding_model or args.agentic else None,
+        "agentic_model": args.agentic_model if args.agentic else None,
+        "agentic_rounds": args.agentic_rounds if args.agentic else None,
+        "agentic_queries": args.agentic_queries if args.agentic else None,
+        "agentic_per_query_k": args.agentic_per_query_k if args.agentic else None,
+        "agentic_domain_hint": args.agentic_domain_hint if args.agentic else None,
         "limited": args.limit_queries is not None,
         "dataset_sha256": DATASETS[args.dataset]["sha256"],
         "index": index_stats,
@@ -599,6 +654,7 @@ def main() -> int:
         "embedding_index": embedding_index,
         "embedding_queries": embedding_queries,
         "embedding_usage": embedding_usage,
+        "agentic_usage": agentic_usage,
         "results": rows,
     }
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"

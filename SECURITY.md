@@ -21,7 +21,7 @@ The built-in web server is intended for local use. It has no authentication, use
 
 ## Remote data processing
 
-BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid mode additionally sends passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Review provider retention and privacy terms before indexing confidential material.
+BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid mode additionally sends passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Optional Agentic mode sends the query and up to eight first-round snippets to the configured OpenRouter planner; generated plans are cached in SQLite. Review provider retention and privacy terms before indexing confidential material.
 
 The default `serve` command discovers `~/Documents` and builds only a local
 BM25 index. Before asking a question, confirm the displayed folder is appropriate:
@@ -38,7 +38,7 @@ configured remote providers. Override discovery with `--documents` or
 
 ## Untrusted documents
 
-Documents are untrusted input. HTML scripts and styles are removed during extraction, but document text can still contain prompt injection instructions. The grounding prompt reduces risk but does not provide a security boundary. Do not let generated answers directly execute commands or authorize consequential actions.
+Documents are untrusted input. HTML scripts and styles are removed during extraction, but document text can still contain prompt injection instructions. The grounding and Agentic planner prompts explicitly treat excerpts as untrusted data, but prompts do not provide a security boundary. Do not let generated answers or search plans directly execute commands or authorize consequential actions.
 
 ## Dependency scope
 

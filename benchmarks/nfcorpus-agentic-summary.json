@@ -1,0 +1,59 @@
+{
+  "benchmark": "BEIR",
+  "dataset": "nfcorpus",
+  "split": "test",
+  "date": "2026-09-26",
+  "documents": 3633,
+  "queries": 323,
+  "dataset_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+  "configuration": {
+    "planner_model": "minimax/minimax-m3",
+    "planner_domain_hint": "medical",
+    "planner_rounds": 2,
+    "queries_per_round": 5,
+    "bm25_per_query_k": 100,
+    "rrf_k": 60,
+    "candidate_top_k": 50,
+    "reranker": "typesafe/jev-1.13-20260917"
+  },
+  "agentic_retrieval": {
+    "ndcg_at_10": 0.380168,
+    "mrr_at_10": 0.597940,
+    "map_at_10": 0.275298,
+    "recall_at_10": 0.185464,
+    "recall_at_50": 0.280765
+  },
+  "agentic_plus_jev": {
+    "ndcg_at_10": 0.430969,
+    "mrr_at_10": 0.644041,
+    "map_at_10": 0.327298,
+    "recall_at_10": 0.204138,
+    "recall_at_50": 0.280765
+  },
+  "comparisons": {
+    "bm25_plus_jev_ndcg_at_10": 0.362468,
+    "hybrid_plus_jev_ndcg_at_10": 0.444327,
+    "relative_gain_over_bm25_plus_jev_percent": 18.90,
+    "relative_gap_to_hybrid_plus_jev_percent": -3.01,
+    "paired_bootstrap_difference_95_percent_interval": [-0.025480, -0.001697]
+  },
+  "oracle_candidate_pool_ndcg_at_10": {
+    "bm25_top_50": 0.488842,
+    "agentic_top_50": 0.604524,
+    "hybrid_top_50": 0.649287
+  },
+  "usage": {
+    "planner_prompt_tokens": 317865,
+    "planner_completion_tokens": 17279,
+    "planner_cost_usd": 0.10543851054,
+    "jev_input_tokens": 8817321,
+    "jev_output_tokens": 369835,
+    "jev_cost_usd": 0.370327482,
+    "combined_planner_and_jev_cost_usd": 0.47576599254
+  },
+  "estimated_serial_latency_ms": {
+    "median": 7516.10,
+    "p95": 26347.26
+  },
+  "caveat": "Unofficial multi-stage pipeline result; not an MTEB submission. Relevance judgments were used only for post-ranking metrics."
+}
