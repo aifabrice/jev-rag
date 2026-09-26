@@ -23,6 +23,12 @@ The built-in web server is intended for local use. It has no authentication, use
 
 BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid mode additionally sends passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Review provider retention and privacy terms before indexing confidential material.
 
+The default `serve` command discovers `~/Documents` and builds only a local
+BM25 index. Before asking a question, confirm the displayed folder is appropriate:
+Jev and answer generation still send the selected candidate excerpts to the
+configured remote providers. Override discovery with `--documents` or
+`JEV_RAG_DOCUMENTS` when the default folder is too broad.
+
 ## Credentials
 
 - Store credentials in environment variables or a local ignored `.env` file.

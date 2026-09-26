@@ -110,23 +110,35 @@ Never commit `.env`. If a key is exposed, revoke it immediately; deleting it fro
 
 ## Quick start
 
-Put documents in `knowledge/`, then run:
+By default, Jev RAG discovers and indexes the current user's `~/Documents`
+folder. Start the local search application with:
 
 ```bash
-jev-rag index
-jev-rag search 'How long does a duplicate-charge refund take?'
 jev-rag serve
 ```
 
 Open <http://127.0.0.1:8765>. The server binds to localhost by default.
 Choose either **BM25 + Jev** (default) or **BM25 + Embedding + Jev** in the UI.
+Startup incrementally updates the local BM25 index. The default mode does not
+create embeddings and does not require a vector database.
 
 Without installing the command, the equivalent source commands are:
 
 ```bash
 python3 local_kb.py index
-python3 local_kb.py search '退款需要多久？'
 python3 local_kb.py serve
+```
+
+You can also search directly from the CLI:
+
+```bash
+jev-rag search 'Which AI products are mentioned in my documents?'
+```
+
+To persist a different default folder, set this in `.env`:
+
+```dotenv
+JEV_RAG_DOCUMENTS=/absolute/path/to/documents
 ```
 
 ## Index another folder
@@ -151,6 +163,8 @@ Exclusions are relative glob patterns and may be repeated. Exclude the project d
 
 The web application currently uses:
 
+- Document root: auto-discovered `~/Documents`, falling back to `knowledge/`
+- Incremental local indexing whenever `serve` starts
 - Retrieval mode: `bm25` by default
 - BM25 candidates: up to 30 passages
 - Hybrid mode: BM25 top 50 + embedding top 50, RRF top 50 (`rrf_k=60`)
@@ -225,6 +239,7 @@ Scanned or image-only PDFs require OCR before indexing. PDF extraction prefers `
 
 - Indexes, caches, and answer histories are stored under `.knowledge/` by default.
 - BM25 indexing and retrieval stay local.
+- Default discovery indexes supported text documents; it does not upload the folder itself.
 - Hybrid mode sends passage text once for corpus embeddings and sends each query for query embedding; vectors are cached locally.
 - Jev receives the query and candidate passage text.
 - OpenRouter receives the query and final evidence passages for answer generation.
