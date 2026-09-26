@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible problem in Jev RAG
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Remove API keys and private document content.
+      placeholder: |
+        1. Run ...
+        2. Ask ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: jev-rag 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, provider, and chunking mode.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sensitive data check
+      options:
+        - label: I removed API keys, private paths, queries, and document contents that should not be public.
+          required: true

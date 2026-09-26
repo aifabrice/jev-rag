@@ -1,0 +1,53 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+.netrc
+.npmrc
+.pypirc
+.secrets/
+secrets/
+credentials.json
+credentials.*.json
+service-account*.json
+token.json
+tokens.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+
+# Local indexes and runtime state
+.knowledge/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Builds
+build/
+dist/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/

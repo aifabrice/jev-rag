@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose an improvement to Jev RAG
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Retrieval, latency, cost, and privacy tradeoffs
+      description: Explain expected effects when relevant.
