@@ -6,6 +6,9 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ### Added
 
+- Zero-configuration local-folder discovery: `serve` now indexes `~/Documents`
+  by default, keeps BM25 + Jev as the vector-free default, and excludes the
+  source checkout when it is inside the discovered folder.
 - Selectable `bm25` and `hybrid` retrieval modes in the CLI, HTTP API, and web UI.
 - Optional OpenRouter embeddings, local NumPy vector cache, and reciprocal-rank fusion before Jev.
 - BM25, embedding/RRF, Jev, first-token, generation, and total latency reporting.

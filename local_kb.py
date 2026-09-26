@@ -44,8 +44,7 @@ DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
 DEFAULT_RETRIEVAL_MODE = "bm25"
 DEFAULT_MAX_TOKENS = 1200
 ANSWER_SOURCE_MAX_CHARS = 3600
-DEFAULT_DOCUMENTS = Path("knowledge")
-DEFAULT_DB = Path(".knowledge/knowledge.db")
+DEFAULT_DB = Path(".knowledge/documents.db")
 DEFAULT_TOP_K = 30
 DEFAULT_HYBRID_TOP_K = 50
 DEFAULT_VECTOR_TOP_K = 50
@@ -71,6 +70,36 @@ SUPPORTED_SUFFIXES = {
     ".docx",
     ".pdf",
 }
+
+
+def discover_documents_root(
+    home: Path | None = None,
+    cwd: Path | None = None,
+) -> Path:
+    """Choose a useful local document folder without enabling embeddings."""
+    configured = os.environ.get("JEV_RAG_DOCUMENTS", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+
+    home = (home or Path.home()).expanduser()
+    candidates = [home / "Documents", home / "OneDrive" / "Documents"]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return (cwd or Path.cwd()) / "knowledge"
+
+
+def checkout_exclude_pattern(documents_root: Path) -> str | None:
+    """Exclude this source checkout when it sits inside the discovered folder."""
+    root = documents_root.expanduser().resolve()
+    checkout = Path(__file__).resolve().parent
+    try:
+        relative = checkout.relative_to(root)
+    except ValueError:
+        return None
+    if not relative.parts:
+        return None
+    return relative.as_posix() + "/**"
 
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+")
 _TOKEN_RE = re.compile(
@@ -1255,7 +1284,7 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 </main><script>
 const $=s=>document.querySelector(s);const esc=s=>(s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>v===null||v===undefined?'—':`${Math.round(v)} ms`;
-let modeInitialized=false;async function status(){const r=await fetch('/api/status');const d=await r.json();if(!modeInitialized&&d.default_retrieval_mode){$('#mode').value=d.default_retrieval_mode;modeInitialized=true}$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code>`;}
+let modeInitialized=false;async function status(){const r=await fetch('/api/status');const d=await r.json();if(!modeInitialized&&d.default_retrieval_mode){$('#mode').value=d.default_retrieval_mode;modeInitialized=true}$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code><br>本地目录：<code>${esc(d.documents_root)}</code><br>默认 BM25 + Jev，不建立向量索引`};
 function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Embedding / RRF',m.embedding_ms],['Jev',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
 function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{const ranks=x.rrf_score!==undefined?`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`:`<span>BM25 #${x.bm25_rank}</span>`;return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:''}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
 $('#form').onsubmit=async e=>{e.preventDefault();const q=$('#q').value.trim();if(!q)return;const clientStart=performance.now();let firstClient=null,answer='',metrics={};$('#go').disabled=true;$('#go').textContent='回答中…';$('#empty').hidden=true;$('#answerPanel').hidden=false;$('#sourcesPanel').hidden=true;$('#answer').textContent='';$('#answer').classList.add('cursor');$('#summary').textContent='正在执行 BM25 召回…';showMetrics(metrics);
@@ -1591,7 +1620,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Jev RAG：默认 BM25 → Jev，可选 BM25 + Embedding → Jev"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {APP_VERSION}")
-    parser.add_argument("--documents", type=Path, default=DEFAULT_DOCUMENTS, help="文档目录")
+    parser.add_argument(
+        "--documents",
+        type=Path,
+        default=None,
+        help="文档目录（默认自动发现 ~/Documents）",
+    )
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite 索引路径")
     parser.add_argument("--env-file", type=Path, default=Path(".env"), help="环境变量文件")
     parser.add_argument(
@@ -1665,7 +1699,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     load_dotenv(args.env_file)
-    kb = KnowledgeBase(args.db, args.documents, args.exclude)
+    documents_root = args.documents or discover_documents_root()
+    exclude_patterns = list(args.exclude)
+    if args.documents is None:
+        checkout_pattern = checkout_exclude_pattern(documents_root)
+        if checkout_pattern and checkout_pattern not in exclude_patterns:
+            exclude_patterns.append(checkout_pattern)
+    kb = KnowledgeBase(args.db, documents_root, exclude_patterns)
     try:
         if args.command == "index":
             print(json.dumps(kb.index(args.chunking, args.rebuild), ensure_ascii=False, indent=2))

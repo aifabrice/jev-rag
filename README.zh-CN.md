@@ -89,23 +89,35 @@ TYPESAFE_API_KEY=
 
 ## 快速开始
 
-把文档放入 `knowledge/`，然后执行：
+默认会自动发现并索引当前用户的 `~/Documents`（macOS 的“文稿”、
+Windows/Linux 的 Documents）。首次可以直接执行：
 
 ```bash
-jev-rag index
-jev-rag search '退款需要多久？'
 jev-rag serve
 ```
 
 浏览器打开 <http://127.0.0.1:8765>。
 页面可切换 **BM25 + Jev（默认）** 和 **BM25 + Embedding + Jev**。
+启动时会自动更新本地 BM25 索引；默认模式不生成 Embedding，
+也不需要向量数据库。
 
 不安装命令行入口也可以直接运行：
 
 ```bash
 python3 local_kb.py index
-python3 local_kb.py search '退款需要多久？'
 python3 local_kb.py serve
+```
+
+也可直接使用命令行搜索：
+
+```bash
+jev-rag search '我的文档里提到了哪些 AI 产品？'
+```
+
+如果要固定另一个默认目录，可在 `.env` 中设置：
+
+```dotenv
+JEV_RAG_DOCUMENTS=/你的/文档目录
 ```
 
 ## 搜索其他目录
@@ -128,6 +140,8 @@ jev-rag \
 
 ## 当前默认流程
 
+- 文档目录自动发现为 `~/Documents`；不存在时回退到项目的 `knowledge/`。
+- `serve` 启动时自动扫描新增、更新和删除的文档。
 - 默认检索模式是 `bm25`。
 - BM25 最多召回 30 个文段。
 - 混合模式使用 BM25 Top 50 + Embedding Top 50，通过 RRF 保留 50 个候选（`rrf_k=60`）。
@@ -190,6 +204,7 @@ jev-rag-smoke-test --dry-run
 ## 隐私与安全
 
 - BM25 建库和召回完全在本地执行。
+- 默认只索引支持的文本文档，不上传整个文件夹。
 - 混合模式首次建索引会向 OpenRouter 发送文段，每次查询会发送查询文本；向量缓存在本地。
 - Jev 会收到问题和候选文段内容。
 - OpenRouter 会收到问题和最终证据，用于生成答案。

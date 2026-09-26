@@ -13,6 +13,8 @@ from local_kb import (
     KnowledgeBase,
     answer_messages,
     build_parser,
+    checkout_exclude_pattern,
+    discover_documents_root,
     fts_query,
     jev_rerank,
     lexical_tokens,
@@ -84,6 +86,28 @@ class PassageTests(unittest.TestCase):
         self.assertEqual(args.retrieval_mode, DEFAULT_RETRIEVAL_MODE)
         self.assertEqual(args.retrieval_mode, "bm25")
         self.assertEqual(args.embedding_model, DEFAULT_EMBEDDING_MODEL)
+
+    def test_default_document_root_prefers_documents_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            documents = home / "Documents"
+            documents.mkdir(parents=True)
+            with patch.dict("local_kb.os.environ", {"JEV_RAG_DOCUMENTS": ""}):
+                self.assertEqual(discover_documents_root(home=home), documents)
+
+    def test_default_document_root_falls_back_to_example_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            cwd = Path(tmp) / "checkout"
+            home.mkdir()
+            with patch.dict("local_kb.os.environ", {"JEV_RAG_DOCUMENTS": ""}):
+                self.assertEqual(discover_documents_root(home=home, cwd=cwd), cwd / "knowledge")
+
+    def test_checkout_is_excluded_from_discovered_parent(self):
+        root = Path(__file__).resolve().parents[2]
+        pattern = checkout_exclude_pattern(root)
+        checkout_name = Path(__file__).resolve().parents[1].name
+        self.assertEqual(pattern, f"{checkout_name}/**")
 
 
 class SearchTests(unittest.TestCase):
