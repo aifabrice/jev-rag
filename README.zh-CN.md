@@ -7,7 +7,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
 
-[English](README.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
+[English](README.md) · [中文版 Benchmark 与开发过程](docs/BENCHMARK_STORY_ZH.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
 
 **[打开互动式公开 Benchmark →](https://aifabrice.github.io/jev-rag/)**
 
