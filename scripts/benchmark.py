@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import statistics
@@ -41,6 +42,38 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[index]
 
 
+def markdown_cell(value: str) -> str:
+    """Keep query text literal and on one Markdown table row."""
+    value = html.escape(value, quote=False)
+    for character in "\\`*_{}[]()#+-.!|":
+        value = value.replace(character, "\\" + character)
+    return "<br>".join(value.splitlines())
+
+
+def format_markdown(summary: dict[str, Any]) -> str:
+    lines = [
+        "## Summary",
+        "",
+        "| Mode | Cases | Hit rate | MRR | Median latency (ms) | p95 latency (ms) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        f"| {summary['mode']} | {summary['cases']} | {summary['hit_rate']:.1%} | "
+        f"{summary['mrr']:.4f} | {summary['latency_ms']['median']:.2f} | "
+        f"{summary['latency_ms']['p95']:.2f} |",
+        "",
+        "## Per-query results",
+        "",
+        "| Query | First relevant rank | Latency (ms) |",
+        "| --- | ---: | ---: |",
+    ]
+    for row in summary["results"]:
+        rank = row["first_relevant_rank"]
+        lines.append(
+            f"| {markdown_cell(row['query'])} | {rank if rank is not None else 'miss'} | "
+            f"{row['latency_ms']:.2f} |"
+        )
+    return "\n".join(lines)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate Jev RAG retrieval on JSONL cases")
     parser.add_argument(
@@ -57,7 +90,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=["openrouter", "typesafe"], default="openrouter")
     parser.add_argument("--threshold", type=float, default=0.0)
     parser.add_argument("--timeout", type=float, default=60.0)
-    parser.add_argument("--json", action="store_true", dest="as_json")
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument("--json", action="store_true", dest="as_json")
+    output.add_argument("--markdown", action="store_true", help="print Markdown report tables")
     return parser
 
 
@@ -116,6 +151,8 @@ def main() -> int:
     }
     if args.as_json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.markdown:
+        print(format_markdown(summary))
     else:
         print(f"Mode: {summary['mode']} | cases: {summary['cases']}")
         print(f"Hit rate: {summary['hit_rate']:.1%} | MRR: {summary['mrr']:.4f}")

@@ -9,6 +9,7 @@ The bundled cases are synthetic smoke tests for the four public example document
 ```bash
 python scripts/benchmark.py
 python scripts/benchmark.py --json
+python scripts/benchmark.py --markdown
 ```
 
 The runner reports hit rate, mean reciprocal rank (MRR), median latency, p95 latency, and the first relevant rank for each query.
@@ -22,6 +23,25 @@ python scripts/benchmark.py --use-jev --provider openrouter
 ```
 
 Use the same cases, documents, chunking mode, `top-k`, and `top-n` for both runs. Jev results are cached by the application unless the underlying query or passage identity changes.
+
+To save shareable Markdown reports, run the same benchmark in each mode:
+
+```bash
+# Offline baseline: no credentials or provider calls.
+python scripts/benchmark.py --markdown > bm25.md
+# Optional: requires provider credentials and may incur API charges.
+python scripts/benchmark.py --markdown --use-jev --provider openrouter > bm25-jev.md
+```
+
+Compare the summary and per-query tables in the two files. `--markdown` changes
+only the output format; Jev is enabled only by `--use-jev`. It cannot be combined
+with `--json`; omitting both output options keeps the existing terminal output.
+Hit rates use one decimal percentage place, MRR uses four decimal places, and
+latencies use two decimal places in milliseconds. Formatting is deterministic,
+but measured latency can vary between runs; note cache state when comparing it.
+A `miss` means no expected path appeared in the returned results and contributes
+zero to hit rate and reciprocal rank. Query text is escaped for Markdown tables,
+with line breaks rendered as `<br>`. Review reports for private queries before sharing.
 
 ## Bring your own evaluation set
 
