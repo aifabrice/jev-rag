@@ -273,7 +273,7 @@ format, limitations, and instructions for testing a private document collection.
 
 ## Project maturity and naming
 
-Other public repositories use similar `jev-rag` names. This project is distinguished by its SQLite FTS5/BM25 retrieval, no-vector design, local-folder indexing, and MiniMax streaming answer path. It is an independent community project and is not affiliated with or endorsed by TypeSafe AI, OpenRouter, or MiniMax.
+Other public repositories use similar `jev-rag` names. This project is distinguished by its vector-free BM25 default, optional embedding hybrid retrieval, Jev reranking, local-folder indexing, and MiniMax streaming answer path. It is an independent community project and is not affiliated with or endorsed by TypeSafe AI, OpenRouter, or MiniMax.
 
 ## License
 
