@@ -12,10 +12,12 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import statistics
 import sys
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -26,7 +28,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from jev_test import load_dotenv  # noqa: E402
-from local_kb import KnowledgeBase, jev_rerank  # noqa: E402
+from local_kb import KnowledgeBase, jev_rerank, make_snippet  # noqa: E402
 
 
 DATASETS = {
@@ -35,6 +37,8 @@ DATASETS = {
         "sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
     }
 }
+
+OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
 
 
 def file_sha256(path: Path) -> str:
@@ -180,6 +184,233 @@ def aggregate(rows: list[dict[str, Any]], cutoffs: list[int]) -> dict[str, Any]:
     }
 
 
+def request_embeddings(
+    texts: list[str],
+    model: str,
+    timeout: float,
+    batch_size: int = 64,
+    retries: int = 2,
+) -> tuple[list[list[float]], dict[str, float]]:
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("缺少环境变量 OPENROUTER_API_KEY")
+
+    vectors: list[list[float]] = []
+    total_usage: dict[str, float] = {}
+    for offset in range(0, len(texts), batch_size):
+        batch = texts[offset : offset + batch_size]
+        body = json.dumps({"model": model, "input": batch}, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "jev-rag-hybrid-benchmark/0.2.0",
+            "X-Title": "Jev RAG Hybrid Benchmark",
+        }
+        payload: dict[str, Any] = {}
+        for attempt in range(retries + 1):
+            request = urllib.request.Request(
+                OPENROUTER_EMBEDDINGS_URL, data=body, headers=headers, method="POST"
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                retryable = exc.code in {408, 425, 429, 500, 502, 503, 504, 529}
+                if retryable and attempt < retries:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                raise RuntimeError(f"Embedding HTTP {exc.code}: {detail[:1000]}") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                if attempt < retries:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                raise RuntimeError(f"Embedding 网络请求失败: {exc}") from exc
+
+        data = payload.get("data")
+        if not isinstance(data, list) or len(data) != len(batch):
+            raise RuntimeError(f"Embedding 响应格式异常: {json.dumps(payload)[:1000]}")
+        ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
+        vectors.extend(item["embedding"] for item in ordered)
+        for key, value in (payload.get("usage") or {}).items():
+            if isinstance(value, (int, float)):
+                total_usage[key] = total_usage.get(key, 0.0) + float(value)
+    return vectors, total_usage
+
+
+def load_or_create_corpus_embeddings(
+    dataset_root: Path,
+    runtime_root: Path,
+    model: str,
+    timeout: float,
+) -> tuple[Any, list[str], dict[str, Any]]:
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("混合检索 benchmark 需要 numpy（pip install numpy）") from exc
+
+    records = list(jsonl(dataset_root / "corpus.jsonl"))
+    doc_ids = [str(record["_id"]) for record in records]
+    fingerprint = hashlib.sha256(
+        json.dumps([model, DATASETS["nfcorpus"]["sha256"], doc_ids]).encode("utf-8")
+    ).hexdigest()[:16]
+    cache_dir = runtime_root / "embeddings"
+    cache_path = cache_dir / f"{urllib.parse.quote(model, safe='')}-{fingerprint}.npz"
+    if cache_path.exists():
+        cached = np.load(cache_path, allow_pickle=False)
+        cached_ids = [str(value) for value in cached["doc_ids"].tolist()]
+        if cached_ids == doc_ids:
+            return cached["vectors"], doc_ids, {
+                "model": model,
+                "cache_hit": True,
+                "documents": len(doc_ids),
+                "dimensions": int(cached["vectors"].shape[1]),
+                "usage": {},
+            }
+
+    texts = [
+        "\n\n".join(
+            part for part in (str(record.get("title") or ""), str(record.get("text") or ""))
+            if part.strip()
+        )
+        for record in records
+    ]
+    started = time.perf_counter()
+    raw_vectors: list[list[float]] = []
+    usage: dict[str, float] = {}
+    batch_size = 64
+    for offset in range(0, len(texts), batch_size):
+        batch_vectors, batch_usage = request_embeddings(
+            texts[offset : offset + batch_size], model, timeout, batch_size=batch_size
+        )
+        raw_vectors.extend(batch_vectors)
+        for key, value in batch_usage.items():
+            usage[key] = usage.get(key, 0.0) + value
+        print(
+            f"Embedded corpus {min(offset + batch_size, len(texts))}/{len(texts)} documents",
+            file=sys.stderr,
+        )
+    vectors = np.asarray(raw_vectors, dtype=np.float32)
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors = vectors / np.maximum(norms, 1e-12)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    np.savez(cache_path, doc_ids=np.asarray(doc_ids), vectors=vectors)
+    return vectors, doc_ids, {
+        "model": model,
+        "cache_hit": False,
+        "documents": len(doc_ids),
+        "dimensions": int(vectors.shape[1]),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        "usage": usage,
+    }
+
+
+def load_or_create_query_embeddings(
+    runtime_root: Path,
+    model: str,
+    query_ids: list[str],
+    queries: dict[str, str],
+    timeout: float,
+) -> tuple[dict[str, list[float]], dict[str, Any]]:
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("混合检索 benchmark 需要 numpy（pip install numpy）") from exc
+
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            [model, [(query_id, queries[query_id]) for query_id in query_ids]],
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+    cache_dir = runtime_root / "embeddings"
+    cache_path = cache_dir / f"queries-{urllib.parse.quote(model, safe='')}-{fingerprint}.npz"
+    if cache_path.exists():
+        cached = np.load(cache_path, allow_pickle=False)
+        cached_ids = [str(value) for value in cached["query_ids"].tolist()]
+        if cached_ids == query_ids:
+            return dict(zip(query_ids, cached["vectors"].tolist())), {
+                "model": model,
+                "cache_hit": True,
+                "queries": len(query_ids),
+                "dimensions": int(cached["vectors"].shape[1]),
+                "usage": {},
+            }
+
+    started = time.perf_counter()
+    vectors, usage = request_embeddings(
+        [queries[query_id] for query_id in query_ids],
+        model,
+        timeout,
+        batch_size=64,
+    )
+    matrix = np.asarray(vectors, dtype=np.float32)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    np.savez(cache_path, query_ids=np.asarray(query_ids), vectors=matrix)
+    return dict(zip(query_ids, vectors)), {
+        "model": model,
+        "cache_hit": False,
+        "queries": len(query_ids),
+        "dimensions": int(matrix.shape[1]),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        "usage": usage,
+    }
+
+
+def vector_rank(
+    query_vector: list[float], corpus_vectors: Any, doc_ids: list[str], limit: int
+) -> list[str]:
+    import numpy as np
+
+    query = np.asarray(query_vector, dtype=np.float32)
+    query /= max(float(np.linalg.norm(query)), 1e-12)
+    scores = corpus_vectors @ query
+    limit = min(max(1, limit), len(doc_ids))
+    indexes = np.argpartition(-scores, limit - 1)[:limit]
+    indexes = indexes[np.argsort(-scores[indexes])]
+    return [doc_ids[int(index)] for index in indexes]
+
+
+def reciprocal_rank_fusion(
+    lexical: list[dict[str, Any]],
+    vector_doc_ids: list[str],
+    documents: dict[str, dict[str, Any]],
+    path_to_doc_id: dict[str, str],
+    limit: int,
+    rrf_k: int = 60,
+) -> list[dict[str, Any]]:
+    lexical_by_id = {path_to_doc_id[item["path"]]: item for item in lexical}
+    lexical_ranks = {doc_id: rank for rank, doc_id in enumerate(lexical_by_id, 1)}
+    vector_ranks = {doc_id: rank for rank, doc_id in enumerate(vector_doc_ids, 1)}
+    scores: dict[str, float] = {}
+    for doc_id, rank in lexical_ranks.items():
+        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (rrf_k + rank)
+    for doc_id, rank in vector_ranks.items():
+        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (rrf_k + rank)
+    ranked_ids = sorted(
+        scores,
+        key=lambda doc_id: (
+            -scores[doc_id],
+            lexical_ranks.get(doc_id, 10**9),
+            vector_ranks.get(doc_id, 10**9),
+        ),
+    )[:limit]
+    results: list[dict[str, Any]] = []
+    for position, doc_id in enumerate(ranked_ids, 1):
+        item = dict(lexical_by_id.get(doc_id) or documents[doc_id])
+        item["original_bm25_rank"] = lexical_ranks.get(doc_id)
+        item["vector_rank"] = vector_ranks.get(doc_id)
+        item["rrf_score"] = round(scores[doc_id], 8)
+        # jev_rerank uses bm25_rank as its deterministic tie breaker. For a
+        # hybrid candidate pool, the fused retrieval rank is the fair fallback.
+        item["bm25_rank"] = position
+        item["retrieval_rank"] = position
+        results.append(item)
+    return results
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate Jev RAG on a public BEIR dataset")
     parser.add_argument("--dataset", choices=sorted(DATASETS), default="nfcorpus")
@@ -187,6 +418,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=100, help="BM25 candidate pool size")
     parser.add_argument("--use-jev", action="store_true", help="Rerank the BM25 candidate pool")
     parser.add_argument("--provider", choices=["openrouter", "typesafe"], default="openrouter")
+    parser.add_argument(
+        "--embedding-model",
+        help="Enable BM25 + OpenRouter embedding retrieval with reciprocal-rank fusion",
+    )
+    parser.add_argument("--vector-top-k", type=int, default=50)
+    parser.add_argument("--rrf-k", type=int, default=60)
     parser.add_argument("--limit-queries", type=int, help="Deterministic prefix for a pilot run")
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
@@ -202,6 +439,10 @@ def main() -> int:
     args = build_parser().parse_args()
     if not 1 <= args.top_k <= 100:
         raise SystemExit("--top-k must be between 1 and 100")
+    if not 1 <= args.vector_top_k <= 100:
+        raise SystemExit("--vector-top-k must be between 1 and 100")
+    if args.rrf_k < 1:
+        raise SystemExit("--rrf-k must be positive")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -214,13 +455,48 @@ def main() -> int:
     query_ids = sorted(query_id for query_id in qrels if query_id in queries)
     if args.limit_queries:
         query_ids = query_ids[: args.limit_queries]
+    cutoffs = sorted({k for k in (1, 3, 5, 10, 30, args.top_k, 100) if k <= args.top_k})
 
     db_name = f"{args.dataset}-{args.split}.db"
     kb = KnowledgeBase(runtime_root / db_name, documents, [])
     rows: list[dict[str, Any]] = []
     total_usage: dict[str, float] = {}
+    embedding_usage: dict[str, float] = {}
+    embedding_index: dict[str, Any] | None = None
+    embedding_queries: dict[str, Any] | None = None
     try:
         index_stats = kb.index("none")
+        corpus_vectors = None
+        vector_doc_ids: list[str] = []
+        documents_by_id: dict[str, dict[str, Any]] = {}
+        query_vectors_by_id: dict[str, list[float]] = {}
+        if args.embedding_model:
+            corpus_vectors, vector_doc_ids, embedding_index = load_or_create_corpus_embeddings(
+                dataset_root, runtime_root, args.embedding_model, args.timeout
+            )
+            query_vectors_by_id, embedding_queries = load_or_create_query_embeddings(
+                runtime_root,
+                args.embedding_model,
+                query_ids,
+                queries,
+                args.timeout,
+            )
+            for key, value in (embedding_queries.get("usage") or {}).items():
+                if isinstance(value, (int, float)):
+                    embedding_usage[key] = embedding_usage.get(key, 0.0) + float(value)
+            for row in kb.connection.execute(
+                """
+                SELECT rowid, doc_id, passage_no, path, title, heading,
+                       start_line, end_line, body
+                FROM passages ORDER BY rowid
+                """
+            ):
+                item = dict(row)
+                item["passage_no"] = int(item["passage_no"])
+                item["start_line"] = int(item["start_line"])
+                item["end_line"] = int(item["end_line"])
+                item["snippet"] = make_snippet(item["body"], "")
+                documents_by_id[path_to_doc_id[item["path"]]] = item
         for number, query_id in enumerate(query_ids, 1):
             query = queries[query_id]
             started = time.perf_counter()
@@ -228,6 +504,33 @@ def main() -> int:
                 candidates = kb.lexical_search(query, args.top_k)
             except ValueError:
                 candidates = []
+            retrieval_meta: dict[str, Any] = {"mode": "bm25"}
+            if args.embedding_model:
+                dense_ids = vector_rank(
+                    query_vectors_by_id[query_id],
+                    corpus_vectors,
+                    vector_doc_ids,
+                    args.vector_top_k,
+                )
+                candidates = reciprocal_rank_fusion(
+                    candidates,
+                    dense_ids,
+                    documents_by_id,
+                    path_to_doc_id,
+                    args.top_k,
+                    args.rrf_k,
+                )
+                retrieval_meta = {
+                    "mode": "bm25+embedding+rrf",
+                    "embedding_model": args.embedding_model,
+                    "vector_top_k": args.vector_top_k,
+                    "rrf_k": args.rrf_k,
+                }
+            retrieval_ranked_ids = [path_to_doc_id[item["path"]] for item in candidates]
+            retrieval_metrics = metrics_for_query(
+                retrieval_ranked_ids, qrels[query_id], cutoffs
+            )
+            retrieval_latency_ms = round((time.perf_counter() - started) * 1000, 2)
             jev_meta: dict[str, Any] = {"used": False}
             if args.use_jev:
                 candidates, jev_meta = jev_rerank(
@@ -242,7 +545,6 @@ def main() -> int:
                     if isinstance(value, (int, float)):
                         total_usage[key] = total_usage.get(key, 0.0) + float(value)
             ranked_ids = [path_to_doc_id[item["path"]] for item in candidates]
-            cutoffs = sorted({k for k in (1, 3, 5, 10, 30, 100) if k <= args.top_k})
             rows.append(
                 {
                     "query_id": query_id,
@@ -251,6 +553,10 @@ def main() -> int:
                     "candidate_count": len(ranked_ids),
                     "metrics": metrics_for_query(ranked_ids, qrels[query_id], cutoffs),
                     "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                    "retrieval_ranked_doc_ids": retrieval_ranked_ids,
+                    "retrieval_metrics": retrieval_metrics,
+                    "retrieval_latency_ms": retrieval_latency_ms,
+                    "retrieval": retrieval_meta,
                     "jev": jev_meta,
                 }
             )
@@ -260,17 +566,39 @@ def main() -> int:
         kb.close()
 
     summary = aggregate(rows, cutoffs)
+    retrieval_summary = aggregate(
+        [
+            {"metrics": row["retrieval_metrics"], "latency_ms": row["retrieval_latency_ms"]}
+            for row in rows
+        ],
+        cutoffs,
+    )
     result = {
         "benchmark": "BEIR",
         "dataset": args.dataset,
         "split": args.split,
-        "mode": f"bm25+jev:{args.provider}" if args.use_jev else "bm25",
+        "mode": (
+            f"bm25+embedding+rrf+jev:{args.provider}"
+            if args.embedding_model and args.use_jev
+            else "bm25+embedding+rrf"
+            if args.embedding_model
+            else f"bm25+jev:{args.provider}"
+            if args.use_jev
+            else "bm25"
+        ),
         "top_k": args.top_k,
+        "vector_top_k": args.vector_top_k if args.embedding_model else None,
+        "embedding_model": args.embedding_model,
+        "rrf_k": args.rrf_k if args.embedding_model else None,
         "limited": args.limit_queries is not None,
         "dataset_sha256": DATASETS[args.dataset]["sha256"],
         "index": index_stats,
         "summary": summary,
+        "retrieval_summary": retrieval_summary,
         "usage": total_usage,
+        "embedding_index": embedding_index,
+        "embedding_queries": embedding_queries,
+        "embedding_usage": embedding_usage,
         "results": rows,
     }
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"

@@ -1,6 +1,6 @@
 # Jev RAG
 
-**基于 SQLite BM25、Jev 重排与流式引用回答的无向量本地知识库。**
+**默认使用无向量 BM25 + Jev，也可切换 Embedding 混合检索的本地知识库。**
 
 [![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
@@ -14,34 +14,45 @@
 BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询，Jev 对 SQLite BM25
 召回的前 30 个候选进行重排。
 
-| 指标 | BM25 | BM25 + Jev | 相对提升 |
+| 方案 | nDCG@10 | MRR@10 | Recall@10 |
 | --- | ---: | ---: | ---: |
-| nDCG@10 | 0.305654 | **0.353235** | **+15.57%** |
-| MRR@10 | 0.512697 | **0.585817** | **+14.26%** |
-| Recall@10 | 0.147309 | **0.158667** | **+7.71%** |
+| BM25 Top 30 | 0.305654 | 0.512697 | 0.147309 |
+| BM25 Top 30 + Jev | 0.353235 | 0.585817 | 0.158667 |
+| BM25 Top 50 + Jev | 0.362468 | 0.593023 | 0.164474 |
+| BM25 Top 50 + Embedding Top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
+| **混合召回 Top 50 + Jev** | **0.444327** | **0.654583** | **0.214907** |
+
+以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
+`0.444327` 约为 **251 个结果中第 4（Top 1.6%）**。这是一个**非官方的数值比较**，
+不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且 Top 50 参数是在同一测试集上观察的。
 
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
 
 ![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
 ```text
-本地文件 → SQLite FTS5 / BM25 → Jev 证据重排 → MiniMax 引用回答
+默认：本地文件 → SQLite BM25 ──────────────────→ Jev → MiniMax
+混合：本地文件 → BM25 + OpenRouter Embedding/RRF → Jev → MiniMax
 ```
 
-Jev RAG 不需要 Embedding、向量数据库或 GPU。它扫描本地文件夹，用 SQLite FTS5/BM25 召回候选文段，再让 Jev 判断哪些文段真正有助于回答问题，最后可通过 OpenRouter 调用回答模型生成带引用的流式答案。
+Jev RAG 默认只用 SQLite FTS5/BM25，不需要 Embedding、向量数据库或 GPU。
+需要更强的语义召回时，可在网页或 CLI 切换到 BM25 + Embedding + RRF，
+然后使用同一个 Jev 证据重排和 MiniMax 引用回答链路。归一化向量矩阵缓存在本地，不需要单独的向量库。
 
 > 当前状态：Alpha。适合本地试用和二次开发，但 1.0 之前接口与数据库结构可能调整。
 
 ## 核心特点
 
-- 无向量、无 Embedding、无外部索引服务。
+- 默认 BM25 + Jev，无向量、无 Embedding、无外部索引服务。
+- 可选 BM25 + Embedding 倒数排名融合（RRF），再进入 Jev。
+- 不需要向量数据库或 GPU，混合模式向量缓存于 `.knowledge/`。
 - 支持 Markdown、文本、HTML、JSON、CSV、YAML、DOCX 和 PDF。
 - 中文二字切词与 SQLite FTS5/BM25 检索。
 - BM25 召回后使用 Jev 进行证据相关度重排。
 - Jev 候选自动分批，避免长请求超过上下文限制。
 - 可设置相关度阈值；没有证据时明确拒答。
 - MiniMax 流式回答，并显示来源编号。
-- 页面展示 BM25、Jev、首 Token、生成和总耗时。
+- 页面展示 BM25、Embedding/RRF、Jev、首 Token、生成和总耗时。
 - SQLite 保存索引、Jev 缓存和问答运行记录。
 
 ## 与向量 RAG 的区别
@@ -62,6 +73,8 @@ Jev RAG 不需要 Embedding、向量数据库或 GPU。它扫描本地文件夹�
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[documents]'
+# 如果需要混合检索：
+python -m pip install -e '.[documents,embeddings]'
 cp .env.example .env
 ```
 
@@ -85,6 +98,7 @@ jev-rag serve
 ```
 
 浏览器打开 <http://127.0.0.1:8765>。
+页面可切换 **BM25 + Jev（默认）** 和 **BM25 + Embedding + Jev**。
 
 不安装命令行入口也可以直接运行：
 
@@ -114,7 +128,10 @@ jev-rag \
 
 ## 当前默认流程
 
+- 默认检索模式是 `bm25`。
 - BM25 最多召回 30 个文段。
+- 混合模式使用 BM25 Top 50 + Embedding Top 50，通过 RRF 保留 50 个候选（`rrf_k=60`）。
+- 默认 Embedding 模型是 OpenRouter 上的 `openai/text-embedding-3-large`。
 - Jev 每批处理 10 个候选，多批并行执行。
 - 最多向回答模型提供 10 个证据文段。
 - 默认回答模型为 OpenRouter 上的 `minimax/minimax-m3`。
@@ -147,7 +164,13 @@ jev-rag index --chunking paragraph --rebuild
 
 ```bash
 # 仅运行 BM25，不调用 Jev。
-jev-rag search '问题' --lexical-only
+jev-rag search '问题' --no-jev
+
+# 混合召回后使用 Jev 重排。
+jev-rag search '问题' --retrieval-mode hybrid
+
+# 启动后页面默认选中混合模式。
+jev-rag serve --retrieval-mode hybrid
 
 # 过滤低于阈值的 Jev 结果。
 jev-rag search '问题' --threshold 0.20
@@ -167,6 +190,7 @@ jev-rag-smoke-test --dry-run
 ## 隐私与安全
 
 - BM25 建库和召回完全在本地执行。
+- 混合模式首次建索引会向 OpenRouter 发送文段，每次查询会发送查询文本；向量缓存在本地。
 - Jev 会收到问题和候选文段内容。
 - OpenRouter 会收到问题和最终证据，用于生成答案。
 - 索引、缓存和问答记录默认保存在 `.knowledge/`。
@@ -214,7 +238,7 @@ python scripts/benchmark.py --use-jev --provider openrouter
 
 ## 项目说明
 
-GitHub 上存在其他相似名称的项目。本项目以 SQLite FTS5/BM25、无向量本地目录索引和 MiniMax 流式回答为主要区别。本项目是独立社区项目，与 TypeSafe AI、OpenRouter 和 MiniMax 均无隶属或官方背书关系。
+GitHub 上存在其他相似名称的项目。本项目以 SQLite FTS5/BM25 默认检索、可选混合召回、Jev 重排和 MiniMax 流式回答为主要区别。本项目是独立社区项目，与 TypeSafe AI、OpenRouter 和 MiniMax 均无隶属或官方背书关系。
 
 ## 许可证
 

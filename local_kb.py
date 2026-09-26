@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Jev RAG: local lexical retrieval, Jev reranking, and grounded answers.
+"""Jev RAG: local retrieval, Jev reranking, and grounded answers.
 
-The application deliberately has no embedding model and no vector database.
-It can run as a CLI or as a small local web application.
+The default pipeline is vector-free SQLite BM25 + Jev. An optional hybrid
+mode adds OpenRouter embeddings and reciprocal-rank fusion before Jev without
+requiring a vector database. The app runs as a CLI or a local web application.
 """
 
 from __future__ import annotations
@@ -39,10 +40,18 @@ from jev_test import load_dotenv, request_decision
 
 APP_VERSION = "0.2.0"
 DEFAULT_GENERATOR_MODEL = "minimax/minimax-m3"
+DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
+DEFAULT_RETRIEVAL_MODE = "bm25"
 DEFAULT_MAX_TOKENS = 1200
 ANSWER_SOURCE_MAX_CHARS = 3600
 DEFAULT_DOCUMENTS = Path("knowledge")
 DEFAULT_DB = Path(".knowledge/knowledge.db")
+DEFAULT_TOP_K = 30
+DEFAULT_HYBRID_TOP_K = 50
+DEFAULT_VECTOR_TOP_K = 50
+DEFAULT_RRF_K = 60
+OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
+EMBEDDING_TEXT_MAX_CHARS = 12000
 JEV_BATCH_SIZE = 10
 GENERATOR_RETRIES = 2
 SUPPORTED_SUFFIXES = {
@@ -342,6 +351,7 @@ class KnowledgeBase:
         self.connection = sqlite3.connect(self.db_path, timeout=30)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA journal_mode=WAL")
+        self._embedding_memory: dict[str, tuple[str, Any, Any, dict[str, Any]]] = {}
         self._create_schema()
 
     def close(self) -> None:
@@ -386,10 +396,13 @@ class KnowledgeBase:
                 id INTEGER PRIMARY KEY,
                 query TEXT NOT NULL,
                 generator_model TEXT NOT NULL,
+                retrieval_mode TEXT NOT NULL DEFAULT 'bm25',
+                embedding_model TEXT,
                 use_jev INTEGER NOT NULL,
                 candidate_count INTEGER NOT NULL,
                 returned_count INTEGER NOT NULL,
                 lexical_ms REAL,
+                embedding_ms REAL,
                 jev_ms REAL,
                 first_token_ms REAL,
                 generation_ms REAL,
@@ -403,6 +416,18 @@ class KnowledgeBase:
             );
             """
         )
+        columns = {
+            str(row["name"])
+            for row in self.connection.execute("PRAGMA table_info(answer_runs)").fetchall()
+        }
+        if "retrieval_mode" not in columns:
+            self.connection.execute(
+                "ALTER TABLE answer_runs ADD COLUMN retrieval_mode TEXT NOT NULL DEFAULT 'bm25'"
+            )
+        if "embedding_model" not in columns:
+            self.connection.execute("ALTER TABLE answer_runs ADD COLUMN embedding_model TEXT")
+        if "embedding_ms" not in columns:
+            self.connection.execute("ALTER TABLE answer_runs ADD COLUMN embedding_ms REAL")
         self.connection.commit()
 
     def _setting(self, key: str) -> str | None:
@@ -421,6 +446,7 @@ class KnowledgeBase:
         self.connection.execute("DELETE FROM documents")
         self.connection.execute("DELETE FROM rerank_cache")
         self.connection.commit()
+        self._embedding_memory.clear()
 
     def index(self, chunking: str = "auto", rebuild: bool = False) -> dict[str, Any]:
         if chunking not in {"auto", "none", "paragraph"}:
@@ -508,6 +534,8 @@ class KnowledgeBase:
         self._set_setting("exclude_patterns", json.dumps(self.exclude_patterns, ensure_ascii=False))
         self._set_setting("last_indexed_at", utc_now())
         self.connection.commit()
+        if stats["added"] or stats["updated"] or stats["removed"]:
+            self._embedding_memory.clear()
         stats.update(self.status())
         return stats
 
@@ -552,6 +580,24 @@ class KnowledgeBase:
             results.append(item)
         return results
 
+    def embedding_passages(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT rowid, doc_id, passage_no, path, title, heading,
+                   start_line, end_line, body
+            FROM passages ORDER BY rowid
+            """
+        ).fetchall()
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["rowid"] = int(item["rowid"])
+            item["passage_no"] = int(item["passage_no"])
+            item["start_line"] = int(item["start_line"])
+            item["end_line"] = int(item["end_line"])
+            results.append(item)
+        return results
+
     def cache_get(self, cache_key: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT response_json FROM rerank_cache WHERE cache_key=?", (cache_key,)
@@ -569,15 +615,18 @@ class KnowledgeBase:
         cursor = self.connection.execute(
             """
             INSERT INTO answer_runs(
-                query,generator_model,use_jev,candidate_count,returned_count,
-                lexical_ms,jev_ms,first_token_ms,generation_ms,total_ms,
+                query,generator_model,retrieval_mode,embedding_model,use_jev,
+                candidate_count,returned_count,lexical_ms,embedding_ms,jev_ms,
+                first_token_ms,generation_ms,total_ms,
                 prompt_tokens,completion_tokens,cost,answer,sources_json,created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                run["query"], run["generator_model"], int(run["use_jev"]),
+                run["query"], run["generator_model"], run.get("retrieval_mode", "bm25"),
+                run.get("embedding_model"), int(run["use_jev"]),
                 run["candidate_count"], run["returned_count"], run.get("lexical_ms"),
-                run.get("jev_ms"), run.get("first_token_ms"), run.get("generation_ms"),
+                run.get("embedding_ms"), run.get("jev_ms"), run.get("first_token_ms"),
+                run.get("generation_ms"),
                 run.get("total_ms"), run.get("prompt_tokens"), run.get("completion_tokens"),
                 run.get("cost"), run["answer"],
                 json.dumps(run["sources"], ensure_ascii=False), utc_now(),
@@ -589,8 +638,9 @@ class KnowledgeBase:
     def recent_answer_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
-            SELECT id,query,generator_model,use_jev,candidate_count,returned_count,
-                   lexical_ms,jev_ms,first_token_ms,generation_ms,total_ms,
+            SELECT id,query,generator_model,retrieval_mode,embedding_model,use_jev,
+                   candidate_count,returned_count,lexical_ms,embedding_ms,jev_ms,
+                   first_token_ms,generation_ms,total_ms,
                    prompt_tokens,completion_tokens,cost,created_at
             FROM answer_runs ORDER BY id DESC LIMIT ?
             """,
@@ -611,6 +661,241 @@ def make_snippet(text: str, query: str, max_chars: int = 520) -> str:
     prefix = "…" if start else ""
     suffix = "…" if end < len(text) else ""
     return prefix + text[start:end].strip() + suffix
+
+
+def request_embeddings(
+    texts: list[str],
+    model: str,
+    timeout: float,
+    batch_size: int = 64,
+    retries: int = 2,
+) -> tuple[list[list[float]], dict[str, float]]:
+    """Create embeddings through OpenRouter's OpenAI-compatible endpoint."""
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("混合检索缺少环境变量 OPENROUTER_API_KEY")
+
+    vectors: list[list[float]] = []
+    total_usage: dict[str, float] = {}
+    for offset in range(0, len(texts), batch_size):
+        batch = texts[offset : offset + batch_size]
+        body = json.dumps({"model": model, "input": batch}, ensure_ascii=False).encode("utf-8")
+        payload: dict[str, Any] = {}
+        for attempt in range(retries + 1):
+            request = urllib.request.Request(
+                OPENROUTER_EMBEDDINGS_URL,
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": f"jev-rag/{APP_VERSION}",
+                    "X-Title": "Jev RAG Hybrid Retrieval",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                retryable = exc.code in {408, 425, 429, 500, 502, 503, 504, 520, 522, 524, 529}
+                if retryable and attempt < retries:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                raise RuntimeError(f"Embedding HTTP {exc.code}: {detail[:1000]}") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                if attempt < retries:
+                    time.sleep(0.5 * (2**attempt))
+                    continue
+                raise RuntimeError(f"Embedding 网络请求失败: {exc}") from exc
+
+        data = payload.get("data")
+        if not isinstance(data, list) or len(data) != len(batch):
+            raise RuntimeError(f"Embedding 响应格式异常: {json.dumps(payload)[:1000]}")
+        ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
+        vectors.extend(item["embedding"] for item in ordered)
+        for key, value in (payload.get("usage") or {}).items():
+            if isinstance(value, (int, float)):
+                total_usage[key] = total_usage.get(key, 0.0) + float(value)
+    return vectors, total_usage
+
+
+def _numpy() -> Any:
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError(
+            "混合检索需要 numpy，请运行 pip install -e '.[embeddings]'"
+        ) from exc
+    return np
+
+
+def _passage_fingerprint(model: str, passages: list[dict[str, Any]]) -> str:
+    digest = hashlib.sha256(model.encode("utf-8"))
+    for item in passages:
+        digest.update(str(item["rowid"]).encode("ascii"))
+        digest.update(str(item["path"]).encode("utf-8", errors="replace"))
+        digest.update(sha256_text(item["body"]).encode("ascii"))
+    return digest.hexdigest()[:20]
+
+
+def load_or_create_embedding_index(
+    kb: KnowledgeBase,
+    model: str,
+    timeout: float,
+) -> tuple[Any, Any, dict[str, Any], list[dict[str, Any]]]:
+    """Load a normalized local matrix or build it once through OpenRouter."""
+    np = _numpy()
+    passages = kb.embedding_passages()
+    fingerprint = _passage_fingerprint(model, passages)
+    memory_key = f"{model}:{fingerprint}"
+    memory = kb._embedding_memory.get(memory_key)
+    if memory:
+        _, rowids, vectors, meta = memory
+        return rowids, vectors, {**meta, "cache_hit": True, "memory_hit": True}, passages
+
+    model_id = sha256_text(model)[:12]
+    cache_dir = kb.db_path.parent / "embeddings"
+    cache_path = cache_dir / f"{kb.db_path.stem}-{model_id}-{fingerprint}.npz"
+    if cache_path.exists():
+        with np.load(cache_path, allow_pickle=False) as cached:
+            rowids = cached["rowids"].copy()
+            vectors = cached["vectors"].copy()
+        if len(rowids) == len(passages):
+            meta = {
+                "model": model,
+                "cache_hit": True,
+                "memory_hit": False,
+                "documents": len(passages),
+                "dimensions": int(vectors.shape[1]) if len(vectors) else 0,
+                "usage": {},
+            }
+            kb._embedding_memory[memory_key] = (fingerprint, rowids, vectors, meta)
+            return rowids, vectors, meta, passages
+
+    started = time.perf_counter()
+    texts = [
+        "\n\n".join(
+            part
+            for part in (str(item["title"]), str(item["heading"]), str(item["body"]))
+            if part.strip()
+        )[:EMBEDDING_TEXT_MAX_CHARS]
+        for item in passages
+    ]
+    raw_vectors, usage = request_embeddings(texts, model, timeout) if texts else ([], {})
+    vectors = np.asarray(raw_vectors, dtype=np.float32)
+    if len(vectors):
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        vectors = vectors / np.maximum(norms, 1e-12)
+    else:
+        vectors = np.empty((0, 0), dtype=np.float32)
+    rowids = np.asarray([int(item["rowid"]) for item in passages], dtype=np.int64)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with cache_path.open("wb") as handle:
+        np.savez(handle, rowids=rowids, vectors=vectors)
+    meta = {
+        "model": model,
+        "cache_hit": False,
+        "memory_hit": False,
+        "documents": len(passages),
+        "dimensions": int(vectors.shape[1]) if len(vectors) else 0,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        "usage": usage,
+    }
+    kb._embedding_memory[memory_key] = (fingerprint, rowids, vectors, meta)
+    return rowids, vectors, meta, passages
+
+
+def reciprocal_rank_fusion(
+    bm25_results: list[dict[str, Any]],
+    vector_results: list[dict[str, Any]],
+    limit: int,
+    rrf_k: int = DEFAULT_RRF_K,
+) -> list[dict[str, Any]]:
+    """Fuse two ranked lists while keeping each source rank inspectable."""
+    items: dict[int, dict[str, Any]] = {}
+    scores: dict[int, float] = {}
+    for source, rank_key in ((bm25_results, "bm25_rank"), (vector_results, "vector_rank")):
+        for rank, candidate in enumerate(source, start=1):
+            rowid = int(candidate["rowid"])
+            scores[rowid] = scores.get(rowid, 0.0) + 1.0 / (rrf_k + rank)
+            merged = items.setdefault(rowid, dict(candidate))
+            merged.update(candidate)
+            merged[rank_key] = rank
+    ordered = sorted(items.values(), key=lambda item: (-scores[int(item["rowid"])], int(item["rowid"])))
+    for rank, item in enumerate(ordered[:limit], start=1):
+        item["retrieval_rank"] = rank
+        item["rrf_score"] = round(scores[int(item["rowid"])], 8)
+    return ordered[:limit]
+
+
+def retrieve_candidates(
+    kb: KnowledgeBase,
+    query: str,
+    retrieval_mode: str = DEFAULT_RETRIEVAL_MODE,
+    top_k: int = DEFAULT_TOP_K,
+    hybrid_top_k: int = DEFAULT_HYBRID_TOP_K,
+    vector_top_k: int = DEFAULT_VECTOR_TOP_K,
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    rrf_k: int = DEFAULT_RRF_K,
+    timeout: float = 60.0,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if retrieval_mode not in {"bm25", "hybrid"}:
+        raise ValueError("retrieval_mode 必须是 bm25 或 hybrid")
+
+    lexical_started = time.perf_counter()
+    bm25_limit = hybrid_top_k if retrieval_mode == "hybrid" else top_k
+    bm25_results = kb.lexical_search(query, bm25_limit)
+    lexical_ms = round((time.perf_counter() - lexical_started) * 1000, 1)
+    if retrieval_mode == "bm25":
+        for rank, item in enumerate(bm25_results, start=1):
+            item["retrieval_rank"] = rank
+        return bm25_results, {
+            "mode": "bm25",
+            "lexical_ms": lexical_ms,
+            "embedding_ms": 0.0,
+            "embedding": None,
+        }
+
+    hybrid_started = time.perf_counter()
+    rowids, corpus_vectors, index_meta, passages = load_or_create_embedding_index(
+        kb, embedding_model, timeout
+    )
+    vector_results: list[dict[str, Any]] = []
+    query_usage: dict[str, float] = {}
+    if len(rowids):
+        np = _numpy()
+        query_vectors, query_usage = request_embeddings([query], embedding_model, timeout)
+        query_vector = np.asarray(query_vectors[0], dtype=np.float32)
+        query_vector /= max(float(np.linalg.norm(query_vector)), 1e-12)
+        scores = corpus_vectors @ query_vector
+        positions = np.argsort(-scores, kind="stable")[: max(1, min(vector_top_k, len(rowids)))]
+        by_rowid = {int(item["rowid"]): item for item in passages}
+        for vector_rank, position in enumerate(positions.tolist(), start=1):
+            item = dict(by_rowid[int(rowids[position])])
+            item["vector_rank"] = vector_rank
+            item["vector_score"] = round(float(scores[position]), 6)
+            item["snippet"] = make_snippet(item["body"], query)
+            vector_results.append(item)
+
+    candidates = reciprocal_rank_fusion(
+        bm25_results, vector_results, max(1, hybrid_top_k), rrf_k
+    )
+    usage = dict(index_meta.get("usage") or {})
+    for key, value in query_usage.items():
+        usage[key] = usage.get(key, 0.0) + value
+    embedding_ms = round((time.perf_counter() - hybrid_started) * 1000, 1)
+    return candidates, {
+        "mode": "hybrid",
+        "lexical_ms": lexical_ms,
+        "embedding_ms": embedding_ms,
+        "bm25_candidates": len(bm25_results),
+        "vector_candidates": len(vector_results),
+        "embedding": {**index_meta, "usage": usage},
+        "rrf_k": rrf_k,
+    }
 
 
 def jev_rerank(
@@ -693,7 +978,12 @@ def jev_rerank(
         item = dict(candidate)
         item["jev_score"] = round(scores.get(index, 0.0), 4)
         results.append(item)
-    results.sort(key=lambda item: (-item["jev_score"], item["bm25_rank"]))
+    results.sort(
+        key=lambda item: (
+            -item["jev_score"],
+            item.get("retrieval_rank", item.get("bm25_rank", 10**9)),
+        )
+    )
     for position, item in enumerate(results, start=1):
         item["final_rank"] = position
 
@@ -728,18 +1018,31 @@ def jev_rerank(
 def run_search(
     kb: KnowledgeBase,
     query: str,
-    top_k: int = 30,
+    top_k: int = DEFAULT_TOP_K,
     top_n: int = 10,
     use_jev: bool = True,
     provider: str = "openrouter",
     timeout: float = 60.0,
     threshold: float = 0.0,
     use_cache: bool = True,
+    retrieval_mode: str = DEFAULT_RETRIEVAL_MODE,
+    hybrid_top_k: int = DEFAULT_HYBRID_TOP_K,
+    vector_top_k: int = DEFAULT_VECTOR_TOP_K,
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    rrf_k: int = DEFAULT_RRF_K,
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    lexical_started = time.perf_counter()
-    candidates = kb.lexical_search(query, top_k)
-    lexical_ms = round((time.perf_counter() - lexical_started) * 1000, 1)
+    candidates, retrieval_meta = retrieve_candidates(
+        kb,
+        query,
+        retrieval_mode=retrieval_mode,
+        top_k=top_k,
+        hybrid_top_k=hybrid_top_k,
+        vector_top_k=vector_top_k,
+        embedding_model=embedding_model,
+        rrf_k=rrf_k,
+        timeout=timeout,
+    )
     if use_jev:
         ranked, jev_meta = jev_rerank(kb, query, candidates, provider, timeout, use_cache)
         if threshold > 0:
@@ -755,9 +1058,11 @@ def run_search(
         "candidate_count": len(candidates),
         "returned_count": min(len(ranked), top_n),
         "timing": {
-            "lexical_ms": lexical_ms,
+            "lexical_ms": retrieval_meta["lexical_ms"],
+            "embedding_ms": retrieval_meta["embedding_ms"],
             "total_ms": round((time.perf_counter() - started) * 1000, 1),
         },
+        "retrieval": retrieval_meta,
         "jev": jev_meta,
     }
 
@@ -933,16 +1238,16 @@ WEB_APP = r"""<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
 main{max-width:960px;margin:0 auto;padding:48px 24px 80px}header{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:26px}
 h1{font:600 34px/1.1 Georgia,"Songti SC",serif;margin:0}header p{margin:7px 0 0;color:var(--muted)}#status{text-align:right;color:var(--muted);font-size:13px}
-.search{display:grid;grid-template-columns:1fr auto;gap:10px}input{width:100%;font:inherit;font-size:17px;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:white;outline:none}input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #165c4918}
-button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5}.options{display:flex;gap:18px;align-items:center;margin:12px 2px 24px;color:var(--muted);font-size:13px}.options button{padding:5px 10px;background:transparent;color:var(--accent);border:1px solid var(--line)}
-.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:16px 0}.metric{background:white;border:1px solid var(--line);border-radius:8px;padding:10px 12px}.metric b{display:block;font-size:18px}.metric span{font-size:11px;color:var(--muted)}
+.search{display:grid;grid-template-columns:1fr auto;gap:10px}.search input{width:100%;font:inherit;font-size:17px;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:white;outline:none}.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #165c4918}
+button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5}.options{display:flex;gap:18px;align-items:center;margin:12px 2px 24px;color:var(--muted);font-size:13px}.options select{font:inherit;color:var(--ink);background:white;border:1px solid var(--line);border-radius:7px;padding:6px 9px}.options button{padding:5px 10px;background:transparent;color:var(--accent);border:1px solid var(--line)}
+.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0}.metric{background:white;border:1px solid var(--line);border-radius:8px;padding:10px 12px}.metric b{display:block;font-size:18px}.metric span{font-size:11px;color:var(--muted)}
 .panel{background:white;border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:14px 0}.panel h2{font-size:15px;margin:0 0 12px;color:var(--muted);font-weight:600}.answer{white-space:pre-wrap;font-size:16px;min-height:42px}.cursor:after{content:'▋';color:var(--accent);animation:blink .8s infinite}@keyframes blink{50%{opacity:0}}
 .summary{color:var(--muted);font-size:13px}.source{padding:13px 0;border-top:1px solid var(--line)}.source:first-child{border-top:0}.source h3{font-size:15px;margin:0 0 3px}.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:12px}.score{color:var(--accent);font-weight:650}.snippet{white-space:pre-wrap;margin:8px 0 0;color:#36423d;max-height:130px;overflow:hidden}.empty{padding:42px 0;text-align:center;color:var(--muted)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.error{color:#9d2b24}
 @media(max-width:700px){main{padding:28px 16px}.search{grid-template-columns:1fr}.search button{height:48px}header{display:block}#status{text-align:left;margin-top:12px}.metrics{grid-template-columns:repeat(2,1fr)}}
 </style></head><body><main>
-<header><div><h1>Jev RAG</h1><p>BM25 → Jev → MiniMax M3，全链路无向量问答。</p></div><div id="status">读取索引…</div></header>
+<header><div><h1>Jev RAG</h1><p>默认 BM25 + Jev，可切换 Embedding 混合召回。</p></div><div id="status">读取索引…</div></header>
 <form id="form" class="search"><input id="q" autocomplete="off" placeholder="输入一个需要从本地文档回答的问题"><button id="go">提问</button></form>
-<div class="options"><label><input id="jev" type="checkbox" checked style="width:auto"> 使用 Jev 重排</label><button id="reindex" type="button">重新扫描文档</button></div>
+<div class="options"><label>检索模式 <select id="mode"><option value="bm25">BM25 + Jev（默认）</option><option value="hybrid">BM25 + Embedding + Jev</option></select></label><button id="reindex" type="button">重新扫描文档</button></div>
 <div id="metrics" class="metrics" hidden></div><div id="summary" class="summary"></div>
 <section id="answerPanel" class="panel" hidden><h2>MiniMax 回答</h2><div id="answer" class="answer"></div></section>
 <section id="sourcesPanel" class="panel" hidden><h2>检索证据</h2><div id="sources"></div></section>
@@ -950,11 +1255,11 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 </main><script>
 const $=s=>document.querySelector(s);const esc=s=>(s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>v===null||v===undefined?'—':`${Math.round(v)} ms`;
-async function status(){const r=await fetch('/api/status');const d=await r.json();$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code>`;}
-function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Jev',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
-function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>`<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span><span>BM25 #${x.bm25_rank}</span>${x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:''}</div><div class="snippet">${esc(x.snippet)}</div></div>`).join('')}
+let modeInitialized=false;async function status(){const r=await fetch('/api/status');const d=await r.json();if(!modeInitialized&&d.default_retrieval_mode){$('#mode').value=d.default_retrieval_mode;modeInitialized=true}$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code>`;}
+function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Embedding / RRF',m.embedding_ms],['Jev',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
+function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{const ranks=x.rrf_score!==undefined?`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`:`<span>BM25 #${x.bm25_rank}</span>`;return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:''}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
 $('#form').onsubmit=async e=>{e.preventDefault();const q=$('#q').value.trim();if(!q)return;const clientStart=performance.now();let firstClient=null,answer='',metrics={};$('#go').disabled=true;$('#go').textContent='回答中…';$('#empty').hidden=true;$('#answerPanel').hidden=false;$('#sourcesPanel').hidden=true;$('#answer').textContent='';$('#answer').classList.add('cursor');$('#summary').textContent='正在执行 BM25 召回…';showMetrics(metrics);
-try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,use_jev:$('#jev').checked})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);$('#summary').textContent=`记录 #${ev.run_id} · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
+try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,retrieval_mode:$('#mode').value,use_jev:true})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);const mode=ev.retrieval_mode==='hybrid'?'混合检索':'BM25';$('#summary').textContent=`记录 #${ev.run_id} · ${mode} + Jev · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
 $('#reindex').onclick=async()=>{const b=$('#reindex');b.disabled=true;b.textContent='扫描中…';try{const r=await fetch('/api/index',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.error);await status();b.textContent=`完成：${d.documents} 个文件`;}catch(e){b.textContent='失败：'+e.message}setTimeout(()=>{b.disabled=false;b.textContent='重新扫描文档'},2500)};status();
 </script></body></html>"""
 
@@ -995,6 +1300,11 @@ class AppHandler(BaseHTTPRequestHandler):
         if len(query) > 8000:
             raise ValueError("查询过长（最大 8000 字符）")
         use_jev = bool(payload.get("use_jev", True))
+        retrieval_mode = str(
+            payload.get("retrieval_mode", self.config["retrieval_mode"])
+        ).strip().lower()
+        if retrieval_mode not in {"bm25", "hybrid"}:
+            raise ValueError("retrieval_mode 必须是 bm25 或 hybrid")
         top_k = int(payload.get("top_k", self.config["top_k"]))
         top_n = int(payload.get("top_n", self.config["top_n"]))
         threshold = float(payload.get("threshold", self.config["threshold"]))
@@ -1010,14 +1320,40 @@ class AppHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
         try:
-            lexical_started = time.perf_counter()
-            candidates = self.kb.lexical_search(query, top_k)
-            lexical_ms = round((time.perf_counter() - lexical_started) * 1000, 1)
             self._stream_event(
                 {
                     "type": "stage",
-                    "message": f"BM25 已召回 {len(candidates)} 条候选，正在进行 Jev 重排…" if use_jev else f"BM25 已召回 {len(candidates)} 条候选…",
-                    "metrics": {"lexical_ms": lexical_ms},
+                    "message": (
+                        "正在执行 BM25 + Embedding 召回并做 RRF 融合…"
+                        if retrieval_mode == "hybrid"
+                        else "正在执行 BM25 召回…"
+                    ),
+                    "metrics": {},
+                }
+            )
+            candidates, retrieval_meta = retrieve_candidates(
+                self.kb,
+                query,
+                retrieval_mode=retrieval_mode,
+                top_k=top_k,
+                hybrid_top_k=self.config["hybrid_top_k"],
+                vector_top_k=self.config["vector_top_k"],
+                embedding_model=self.config["embedding_model"],
+                rrf_k=self.config["rrf_k"],
+                timeout=self.config["timeout"],
+            )
+            lexical_ms = retrieval_meta["lexical_ms"]
+            embedding_ms = retrieval_meta["embedding_ms"]
+            retrieval_label = "混合检索" if retrieval_mode == "hybrid" else "BM25"
+            self._stream_event(
+                {
+                    "type": "stage",
+                    "message": (
+                        f"{retrieval_label} 已召回 {len(candidates)} 条候选，正在进行 Jev 重排…"
+                        if use_jev
+                        else f"{retrieval_label} 已召回 {len(candidates)} 条候选…"
+                    ),
+                    "metrics": {"lexical_ms": lexical_ms, "embedding_ms": embedding_ms},
                 }
             )
 
@@ -1046,7 +1382,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     key: item[key]
                     for key in (
                         "path", "title", "heading", "start_line", "end_line",
-                        "bm25_rank", "bm25_score", "snippet", "final_rank",
+                        "bm25_rank", "bm25_score", "vector_rank", "vector_score",
+                        "retrieval_rank", "rrf_score", "snippet", "final_rank",
                     )
                     if key in item
                 }
@@ -1059,7 +1396,11 @@ class AppHandler(BaseHTTPRequestHandler):
                 {
                     "type": "stage",
                     "message": f"Jev 重排完成{cache_note}，MiniMax 正在生成答案…" if use_jev else "检索完成，MiniMax 正在生成答案…",
-                    "metrics": {"lexical_ms": lexical_ms, "jev_ms": jev_ms},
+                    "metrics": {
+                        "lexical_ms": lexical_ms,
+                        "embedding_ms": embedding_ms,
+                        "jev_ms": jev_ms,
+                    },
                 }
             )
 
@@ -1082,6 +1423,7 @@ class AppHandler(BaseHTTPRequestHandler):
                                 "message": "MiniMax 已输出首个 token，正在继续生成…",
                                 "metrics": {
                                     "lexical_ms": lexical_ms,
+                                    "embedding_ms": embedding_ms,
                                     "jev_ms": jev_ms,
                                     "first_token_ms": first_pipeline_token_ms,
                                 },
@@ -1098,16 +1440,29 @@ class AppHandler(BaseHTTPRequestHandler):
             jev_usage = jev_meta.get("usage") or {}
             generator_cost = usage.get("cost")
             jev_cost = jev_usage.get("cost")
+            embedding_usage = (
+                (retrieval_meta.get("embedding") or {}).get("usage") or {}
+            )
+            embedding_cost = embedding_usage.get("cost")
             total_cost = None
-            if generator_cost is not None or jev_cost is not None:
-                total_cost = float(generator_cost or 0) + float(jev_cost or 0)
+            if generator_cost is not None or jev_cost is not None or embedding_cost is not None:
+                total_cost = (
+                    float(generator_cost or 0)
+                    + float(jev_cost or 0)
+                    + float(embedding_cost or 0)
+                )
             run = {
                 "query": query,
                 "generator_model": generation_meta.get("model", self.config["generator_model"]),
+                "retrieval_mode": retrieval_mode,
+                "embedding_model": (
+                    self.config["embedding_model"] if retrieval_mode == "hybrid" else None
+                ),
                 "use_jev": use_jev,
                 "candidate_count": len(candidates),
                 "returned_count": len(sources),
                 "lexical_ms": lexical_ms,
+                "embedding_ms": embedding_ms,
                 "jev_ms": jev_ms,
                 "first_token_ms": first_pipeline_token_ms,
                 "generation_ms": generation_meta.get("generation_ms"),
@@ -1124,12 +1479,14 @@ class AppHandler(BaseHTTPRequestHandler):
                     "type": "done",
                     "run_id": run_id,
                     "model": run["generator_model"],
+                    "retrieval_mode": retrieval_mode,
                     "candidate_count": len(candidates),
                     "returned_count": len(sources),
                     "cost": total_cost,
                     "usage": usage,
                     "metrics": {
                         "lexical_ms": lexical_ms,
+                        "embedding_ms": embedding_ms,
                         "jev_ms": jev_ms,
                         "first_token_ms": first_pipeline_token_ms,
                         "generation_ms": generation_meta.get("generation_ms"),
@@ -1151,7 +1508,13 @@ class AppHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif path == "/api/status":
-            self._json(self.kb.status())
+            self._json(
+                {
+                    **self.kb.status(),
+                    "default_retrieval_mode": self.config["retrieval_mode"],
+                    "embedding_model": self.config["embedding_model"],
+                }
+            )
         elif path == "/api/runs":
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             limit = int(query.get("limit", ["20"])[0])
@@ -1178,6 +1541,13 @@ class AppHandler(BaseHTTPRequestHandler):
                     provider=self.config["provider"],
                     timeout=self.config["timeout"],
                     threshold=float(payload.get("threshold", 0.0)),
+                    retrieval_mode=str(
+                        payload.get("retrieval_mode", self.config["retrieval_mode"])
+                    ),
+                    hybrid_top_k=self.config["hybrid_top_k"],
+                    vector_top_k=self.config["vector_top_k"],
+                    embedding_model=self.config["embedding_model"],
+                    rrf_k=self.config["rrf_k"],
                 )
                 self._json(result)
             elif path == "/api/index":
@@ -1190,9 +1560,12 @@ class AppHandler(BaseHTTPRequestHandler):
 
 def print_search(result: dict[str, Any]) -> None:
     print(f"\n查询: {result['query']}")
+    mode = result.get("retrieval", {}).get("mode", "bm25")
     print(
         f"候选 {result['candidate_count']} 条，返回 {result['returned_count']} 条；"
-        f"BM25 {result['timing']['lexical_ms']} ms，总计 {result['timing']['total_ms']} ms"
+        f"模式 {mode}；BM25 {result['timing']['lexical_ms']} ms，"
+        f"Embedding {result['timing'].get('embedding_ms', 0)} ms，"
+        f"总计 {result['timing']['total_ms']} ms"
     )
     if result["jev"].get("used"):
         suffix = "（缓存）" if result["jev"].get("cache_hit") else ""
@@ -1202,13 +1575,21 @@ def print_search(result: dict[str, Any]) -> None:
         )
     for item in result["results"]:
         jev = f"  Jev={item['jev_score']:.0%}" if "jev_score" in item else ""
-        print(f"\n{item['final_rank']}. {item['title']}  [BM25 #{item['bm25_rank']}{jev}]")
+        if mode == "hybrid":
+            bm25 = f"BM25 #{item['bm25_rank']}" if "bm25_rank" in item else "BM25 —"
+            vector = f"Vector #{item['vector_rank']}" if "vector_rank" in item else "Vector —"
+            rank = f"RRF #{item['retrieval_rank']} · {bm25} · {vector}"
+        else:
+            rank = f"BM25 #{item['bm25_rank']}"
+        print(f"\n{item['final_rank']}. {item['title']}  [{rank}{jev}]")
         print(f"   {item['path']}:{item['start_line']}-{item['end_line']}  ·  {item['heading']}")
         print(textwrap.indent(item["snippet"].replace("\n", " "), "   "))
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Jev RAG：SQLite FTS5/BM25 → Jev 的无向量本地知识问答")
+    parser = argparse.ArgumentParser(
+        description="Jev RAG：默认 BM25 → Jev，可选 BM25 + Embedding → Jev"
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {APP_VERSION}")
     parser.add_argument("--documents", type=Path, default=DEFAULT_DOCUMENTS, help="文档目录")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite 索引路径")
@@ -1227,11 +1608,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     search_parser = subparsers.add_parser("search", help="搜索本地知识库")
     search_parser.add_argument("query")
-    search_parser.add_argument("--top-k", type=int, default=30, help="BM25 候选数")
+    search_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="BM25 候选数")
+    search_parser.add_argument(
+        "--retrieval-mode",
+        choices=["bm25", "hybrid"],
+        default=DEFAULT_RETRIEVAL_MODE,
+        help="召回模式（默认 bm25）",
+    )
+    search_parser.add_argument("--hybrid-top-k", type=int, default=DEFAULT_HYBRID_TOP_K)
+    search_parser.add_argument("--vector-top-k", type=int, default=DEFAULT_VECTOR_TOP_K)
+    search_parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    search_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
     search_parser.add_argument("--top-n", type=int, default=10, help="Jev 重排后的最终证据数")
     search_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
     search_parser.add_argument("--provider", choices=["openrouter", "typesafe"], default="openrouter")
-    search_parser.add_argument("--lexical-only", action="store_true", help="只运行 BM25，不调用 Jev")
+    search_parser.add_argument(
+        "--no-jev",
+        "--lexical-only",
+        action="store_true",
+        dest="no_jev",
+        help="跳过 Jev（bm25 模式下即为纯 BM25）",
+    )
     search_parser.add_argument("--no-cache", action="store_true", help="忽略 Jev 结果缓存")
     search_parser.add_argument("--timeout", type=float, default=60.0)
     search_parser.add_argument("--json", action="store_true", dest="as_json")
@@ -1248,7 +1645,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_TOKENS,
         help=f"MiniMax 最大输出 token 数（默认 {DEFAULT_MAX_TOKENS}）",
     )
-    serve_parser.add_argument("--top-k", type=int, default=30)
+    serve_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    serve_parser.add_argument(
+        "--retrieval-mode", choices=["bm25", "hybrid"], default=DEFAULT_RETRIEVAL_MODE
+    )
+    serve_parser.add_argument("--hybrid-top-k", type=int, default=DEFAULT_HYBRID_TOP_K)
+    serve_parser.add_argument("--vector-top-k", type=int, default=DEFAULT_VECTOR_TOP_K)
+    serve_parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    serve_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
     serve_parser.add_argument("--top-n", type=int, default=10)
     serve_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
     serve_parser.add_argument("--timeout", type=float, default=60.0)
@@ -1273,11 +1677,16 @@ def main() -> int:
                 args.query,
                 top_k=args.top_k,
                 top_n=args.top_n,
-                use_jev=not args.lexical_only,
+                use_jev=not args.no_jev,
                 provider=args.provider,
                 timeout=args.timeout,
                 threshold=args.threshold,
                 use_cache=not args.no_cache,
+                retrieval_mode=args.retrieval_mode,
+                hybrid_top_k=args.hybrid_top_k,
+                vector_top_k=args.vector_top_k,
+                embedding_model=args.embedding_model,
+                rrf_k=args.rrf_k,
             )
             if args.as_json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -1294,6 +1703,11 @@ def main() -> int:
                 "generator_model": args.generator_model,
                 "max_tokens": args.max_tokens,
                 "top_k": args.top_k,
+                "retrieval_mode": args.retrieval_mode,
+                "hybrid_top_k": args.hybrid_top_k,
+                "vector_top_k": args.vector_top_k,
+                "embedding_model": args.embedding_model,
+                "rrf_k": args.rrf_k,
                 "top_n": args.top_n,
                 "threshold": args.threshold,
                 "timeout": args.timeout,

@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 from local_kb import (
     ANSWER_SOURCE_MAX_CHARS,
+    DEFAULT_EMBEDDING_MODEL,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_RETRIEVAL_MODE,
     KnowledgeBase,
     answer_messages,
     build_parser,
@@ -15,6 +17,7 @@ from local_kb import (
     jev_rerank,
     lexical_tokens,
     openrouter_error_message,
+    reciprocal_rank_fusion,
     split_passages,
 )
 
@@ -76,8 +79,28 @@ class PassageTests(unittest.TestCase):
         args = build_parser().parse_args(["serve"])
         self.assertEqual(args.max_tokens, DEFAULT_MAX_TOKENS)
 
+    def test_default_retrieval_is_vector_free(self):
+        args = build_parser().parse_args(["serve"])
+        self.assertEqual(args.retrieval_mode, DEFAULT_RETRIEVAL_MODE)
+        self.assertEqual(args.retrieval_mode, "bm25")
+        self.assertEqual(args.embedding_model, DEFAULT_EMBEDDING_MODEL)
+
 
 class SearchTests(unittest.TestCase):
+    def test_rrf_combines_bm25_and_vector_ranks(self):
+        base = {
+            "title": "t", "heading": "h", "path": "p", "body": "b",
+            "start_line": 1, "end_line": 1, "snippet": "b",
+        }
+        bm25 = [dict(base, rowid=1, bm25_rank=1), dict(base, rowid=2, bm25_rank=2)]
+        vector = [dict(base, rowid=2, vector_rank=1), dict(base, rowid=3, vector_rank=2)]
+        fused = reciprocal_rank_fusion(bm25, vector, limit=3, rrf_k=60)
+
+        self.assertEqual([item["rowid"] for item in fused], [2, 1, 3])
+        self.assertEqual(fused[0]["bm25_rank"], 2)
+        self.assertEqual(fused[0]["vector_rank"], 1)
+        self.assertEqual(fused[0]["retrieval_rank"], 1)
+
     def test_bm25_finds_two_character_chinese_word(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "docs"

@@ -112,7 +112,7 @@ def request_decision(
             break
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            retryable = exc.code in {408, 425, 429, 500, 502, 503, 504, 529}
+            retryable = exc.code in {408, 425, 429, 500, 502, 503, 504, 520, 522, 524, 529}
             if retryable and attempt < retries:
                 time.sleep(0.4 * (2**attempt))
                 continue

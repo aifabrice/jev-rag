@@ -21,7 +21,7 @@ The built-in web server is intended for local use. It has no authentication, use
 
 ## Remote data processing
 
-BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Review provider retention and privacy terms before indexing confidential material.
+BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid mode additionally sends passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Review provider retention and privacy terms before indexing confidential material.
 
 ## Credentials
 
@@ -36,4 +36,4 @@ Documents are untrusted input. HTML scripts and styles are removed during extrac
 
 ## Dependency scope
 
-The core runtime uses the Python standard library. PDF support optionally uses `pypdf`; `pdftotext` may be invoked when installed. Pin and review dependencies in security-sensitive deployments.
+The default BM25 runtime uses the Python standard library. PDF support optionally uses `pypdf`; hybrid retrieval optionally uses NumPy; `pdftotext` may be invoked when installed. Pin and review dependencies in security-sensitive deployments.
