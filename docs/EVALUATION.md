@@ -101,6 +101,35 @@ The project's first complete public run is documented in
 the exact configuration, quality deltas, provider usage, latency caveats, and
 reproduction commands.
 
+## Evaluate hybrid BM25 + embedding retrieval
+
+Install the optional benchmark dependency, then use an OpenRouter embedding
+model. Corpus and query vectors are cached under the Git-ignored `.knowledge/`
+directory. Reciprocal rank fusion (RRF) combines the BM25 and dense rankings
+before the optional Jev stage:
+
+```bash
+python -m pip install -e '.[benchmark]'
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 \
+  --rrf-k 60 \
+  --use-jev \
+  --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-hybrid.json
+```
+
+The first run pays the one-time corpus embedding cost. Later runs with the same
+model and pinned dataset reuse the local vector cache. The runner records the
+pre-Jev `retrieval_summary` separately from the final reranked `summary`.
+
+The same retrieval path is available in the application with
+`jev-rag search 'query' --retrieval-mode hybrid` or from the web UI. The
+application keeps `bm25` as its default, so installing the project does not
+silently create embeddings or send corpus text to an embedding provider.
+
 ## Interpreting results
 
 - **Hit rate** answers whether at least one expected file appeared in the returned evidence.

@@ -4,6 +4,13 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+### Added
+
+- Selectable `bm25` and `hybrid` retrieval modes in the CLI, HTTP API, and web UI.
+- Optional OpenRouter embeddings, local NumPy vector cache, and reciprocal-rank fusion before Jev.
+- BM25, embedding/RRF, Jev, first-token, generation, and total latency reporting.
+- Complete NFCorpus hybrid benchmark result and clearly qualified MTEB numerical context.
+
 ## [0.2.0] - 2026-09-26
 
 ### Added
