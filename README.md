@@ -218,7 +218,18 @@ To compare the same questions after Jev reranking, explicitly opt in to provider
 python scripts/benchmark.py --use-jev --provider openrouter
 ```
 
-See [Evaluation](docs/EVALUATION.md) for the JSONL format, metrics, limitations, and instructions for testing a private document collection.
+### Public BEIR result
+
+On the complete 323-query BEIR NFCorpus test split, reranking the top 30
+SQLite BM25 candidates with Jev improved nDCG@10 from `0.305654` to `0.353235`
+(+15.57%) and MRR@10 from `0.512697` to `0.585817` (+14.26%). This is a local,
+reproducible project run on a public benchmark, not an official BEIR
+certification or leaderboard submission.
+
+See the [complete NFCorpus result](benchmarks/NFCORPUS_RESULTS.md) for the exact
+model version, dataset checksum, metrics, latency, provider cost, caveats, and
+reproduction commands. See [Evaluation](docs/EVALUATION.md) for the JSONL
+format and instructions for testing a private document collection.
 
 ## Community and roadmap
 

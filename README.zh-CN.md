@@ -189,7 +189,16 @@ python scripts/benchmark.py
 python scripts/benchmark.py --use-jev --provider openrouter
 ```
 
-评测文件格式、指标和局限请参考 [Evaluation](docs/EVALUATION.md)。示例问题只用于验证评测链路，不代表真实业务性能。
+### 公开 BEIR 评测结果
+
+在 BEIR NFCorpus 完整的 323 个测试查询上，Jev 对 SQLite BM25 前 30
+个候选进行重排后，nDCG@10 从 `0.305654` 提升到 `0.353235`（+15.57%），
+MRR@10 从 `0.512697` 提升到 `0.585817`（+14.26%）。这是基于公开测试集的
+本地可复现实测，不代表 BEIR 官方认证或榜单提交。
+
+完整的模型版本、数据集校验值、质量指标、延迟、费用、局限与复现命令请参考
+[NFCorpus 完整结果](benchmarks/NFCORPUS_RESULTS.md)。评测文件格式和私有文档集评测方法请参考
+[Evaluation](docs/EVALUATION.md)。
 
 ## 社区与路线图
 

@@ -42,6 +42,45 @@ python scripts/benchmark.py \
 
 Keep private evaluation sets outside the repository when they contain internal filenames, questions, or document content.
 
+## Run a public BEIR benchmark
+
+The public benchmark adapter downloads the pinned NFCorpus archive into the
+Git-ignored `.knowledge/public-benchmarks` directory, verifies its SHA-256,
+materializes its corpus as local text files, and evaluates the official test
+queries and relevance judgments:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 100 \
+  --output .knowledge/public-benchmarks/results/nfcorpus-bm25.json
+```
+
+This reports nDCG, recall, precision, MRR, and MAP at standard cutoffs. The
+corpus is already passage-oriented, so the adapter indexes each BEIR record as
+one unit without additional chunking.
+
+Jev calls may incur provider charges. Start with a deterministic pilot before
+running the complete 323-query test split:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 30 \
+  --use-jev \
+  --provider openrouter \
+  --limit-queries 10 \
+  --output .knowledge/public-benchmarks/results/nfcorpus-jev-pilot.json
+```
+
+A limited pilot is a plumbing and cost check, not an official full-dataset
+result. Do not compare a limited run with a complete benchmark score.
+
+The project's first complete public run is documented in
+[`benchmarks/NFCORPUS_RESULTS.md`](../benchmarks/NFCORPUS_RESULTS.md), including
+the exact configuration, quality deltas, provider usage, latency caveats, and
+reproduction commands.
+
 ## Interpreting results
 
 - **Hit rate** answers whether at least one expected file appeared in the returned evidence.
