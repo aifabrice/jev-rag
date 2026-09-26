@@ -9,6 +9,19 @@
 
 [简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
+## Public benchmark
+
+Complete BEIR NFCorpus test split: 3,633 documents and 323 queries, with Jev
+reranking the top 30 SQLite BM25 candidates.
+
+| Metric | BM25 | BM25 + Jev | Relative change |
+| --- | ---: | ---: | ---: |
+| nDCG@10 | 0.305654 | **0.353235** | **+15.57%** |
+| MRR@10 | 0.512697 | **0.585817** | **+14.26%** |
+| Recall@10 | 0.147309 | **0.158667** | **+7.71%** |
+
+[Full results, exact configuration, cost, caveats, and reproduction commands](benchmarks/NFCORPUS_RESULTS.md)
+
 ![Jev RAG local web interface](docs/assets/demo-ui.png)
 
 ```text
@@ -218,18 +231,9 @@ To compare the same questions after Jev reranking, explicitly opt in to provider
 python scripts/benchmark.py --use-jev --provider openrouter
 ```
 
-### Public BEIR result
-
-On the complete 323-query BEIR NFCorpus test split, reranking the top 30
-SQLite BM25 candidates with Jev improved nDCG@10 from `0.305654` to `0.353235`
-(+15.57%) and MRR@10 from `0.512697` to `0.585817` (+14.26%). This is a local,
-reproducible project run on a public benchmark, not an official BEIR
-certification or leaderboard submission.
-
-See the [complete NFCorpus result](benchmarks/NFCORPUS_RESULTS.md) for the exact
-model version, dataset checksum, metrics, latency, provider cost, caveats, and
-reproduction commands. See [Evaluation](docs/EVALUATION.md) for the JSONL
-format and instructions for testing a private document collection.
+See the [complete NFCorpus result](benchmarks/NFCORPUS_RESULTS.md) and
+[Evaluation](docs/EVALUATION.md) for public benchmark reproduction, the JSONL
+format, limitations, and instructions for testing a private document collection.
 
 ## Community and roadmap
 
