@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev RAG — Local retrieval without a vector database</title>
+    <meta name="description" content="Explore reproducible BEIR NFCorpus results for BM25, agentic lexical retrieval, Jev reranking, and an optional embedding hybrid pipeline." />
+    <meta property="og:title" content="Jev RAG — Local retrieval, measured" />
+    <meta property="og:description" content="A local-first RAG experiment with vector-free defaults and reproducible retrieval benchmarks." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2310201d'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='40' fill='white' font-family='monospace'%3EJ%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"Jev RAG","codeRepository":"https://github.com/aifabrice/jev-rag","license":"https://opensource.org/license/mit","programmingLanguage":"Python","description":"Local knowledge search with BM25, agentic lexical retrieval, Jev reranking, and grounded answers."}
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="#benchmark">Benchmark</a><a href="#architecture">Architecture</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main id="top">
+        <section class="hero">
+          <div class="eyebrow"><span></span> Open source · MIT · Python</div>
+          <h1>Local retrieval,<br /><em>without the vector tax.</em></h1>
+          <p class="lede">Jev RAG searches local documents with SQLite BM25 or agentic lexical search, reranks evidence with Jev, and streams cited answers. Embeddings are optional, not infrastructure you must own.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/aifabrice/jev-rag">View on GitHub</a>
+            <a class="button secondary" href="#benchmark">Explore the benchmark</a>
+          </div>
+          <div class="command" aria-label="Install command"><span>$</span><code>git clone https://github.com/aifabrice/jev-rag.git</code><button id="copy-command" type="button" aria-label="Copy clone command">Copy</button></div>
+        </section>
+
+        <section class="proof-grid" aria-label="Project highlights">
+          <article><strong>0</strong><span>vector databases required</span></article>
+          <article><strong>3,633</strong><span>NFCorpus documents evaluated</span></article>
+          <article><strong>323</strong><span>test queries, not a hand-picked sample</span></article>
+          <article><strong>0.444</strong><span>best recorded nDCG@10</span></article>
+        </section>
+
+        <section id="benchmark" class="benchmark section">
+          <div class="section-heading">
+            <div><p class="kicker">Public benchmark</p><h2>See what each stage adds.</h2></div>
+            <p>Complete BEIR NFCorpus test split. Select a pipeline to compare its recorded retrieval quality against the BM25 baseline.</p>
+          </div>
+
+          <div class="benchmark-panel">
+            <div class="pipeline-list" role="listbox" aria-label="Benchmark pipeline">
+              <button class="pipeline-option" data-pipeline="bm25" role="option"><span>01</span><div><strong>BM25 top 30</strong><small>Lexical baseline</small></div></button>
+              <button class="pipeline-option" data-pipeline="jev30" role="option"><span>02</span><div><strong>BM25 top 30 + Jev</strong><small>Vector-free default</small></div></button>
+              <button class="pipeline-option" data-pipeline="jev50" role="option"><span>03</span><div><strong>BM25 top 50 + Jev</strong><small>Wider candidate set</small></div></button>
+              <button class="pipeline-option" data-pipeline="agentic" role="option"><span>04</span><div><strong>Agentic lexical top 50</strong><small>Generated search terms</small></div></button>
+              <button class="pipeline-option" data-pipeline="rrf" role="option"><span>05</span><div><strong>BM25 + embedding RRF</strong><small>Hybrid, before Jev</small></div></button>
+              <button class="pipeline-option" data-pipeline="agenticJev" role="option"><span>06</span><div><strong>Agentic lexical + Jev</strong><small>Vector-free expansion</small></div></button>
+              <button class="pipeline-option active" data-pipeline="hybrid" role="option" aria-selected="true"><span>07</span><div><strong>Hybrid top 50 + Jev</strong><small>Best recorded run</small></div></button>
+            </div>
+
+            <div class="metric-stage" aria-live="polite">
+              <div class="metric-lead"><span id="selected-label">Hybrid top 50 + Jev</span><strong id="selected-score">0.444327</strong><small>nDCG@10</small></div>
+              <div class="metric-bars">
+                <div class="metric-row"><div><span>nDCG@10</span><output id="ndcg-value">0.444327</output></div><div class="bar"><i id="ndcg-bar"></i></div></div>
+                <div class="metric-row"><div><span>MRR@10</span><output id="mrr-value">0.654583</output></div><div class="bar"><i id="mrr-bar"></i></div></div>
+                <div class="metric-row"><div><span>Recall@10</span><output id="recall-value">0.214907</output></div><div class="bar"><i id="recall-bar"></i></div></div>
+              </div>
+              <p id="pipeline-note" class="pipeline-note">BM25 and embedding rankings are fused with RRF before Jev reranks the evidence.</p>
+            </div>
+          </div>
+
+          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results on the same public test split. They are not an official MTEB submission or a claim that lexical retrieval always beats embeddings. <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read the full configuration and caveats →</a></div>
+        </section>
+
+        <section id="architecture" class="architecture section">
+          <div class="section-heading"><div><p class="kicker">Architecture</p><h2>Start simple. Add semantics only when they earn their keep.</h2></div></div>
+          <div class="flow" aria-label="Jev RAG retrieval flow">
+            <div class="flow-card source"><small>Local</small><strong>Your documents</strong><span>PDF · DOCX · Markdown · HTML</span></div>
+            <div class="connector"><span>Index</span></div>
+            <div class="flow-stack">
+              <div class="flow-card"><small>Default</small><strong>SQLite FTS5 / BM25</strong><span>Fast, inspectable lexical retrieval</span></div>
+              <div class="flow-card optional"><small>Optional</small><strong>Agentic or embedding retrieval</strong><span>Generated search terms or semantic recall</span></div>
+            </div>
+            <div class="connector"><span>Rerank</span></div>
+            <div class="flow-card accent"><small>Evidence</small><strong>Jev</strong><span>Score and order candidate passages</span></div>
+            <div class="connector"><span>Answer</span></div>
+            <div class="flow-card"><small>Grounded</small><strong>MiniMax</strong><span>Streaming response with citations</span></div>
+          </div>
+        </section>
+
+        <section class="tradeoffs section">
+          <div><p class="kicker">Deliberate trade-offs</p><h2>No architecture wins every query.</h2></div>
+          <div class="tradeoff-grid">
+            <article><span class="signal good">Strong</span><h3>Exact terms, IDs and names</h3><p>BM25 is fast, local, transparent, and excellent when question language overlaps the source.</p></article>
+            <article><span class="signal warn">Watch</span><h3>Synonyms and paraphrases</h3><p>The default path can miss semantic matches. Agentic search or hybrid retrieval can widen recall.</p></article>
+            <article><span class="signal neutral">Private by default</span><h3>Know what leaves the machine</h3><p>Indexing stays local. Selected passages reach Jev and the answer provider; hybrid mode also calls an embedding API.</p></article>
+          </div>
+        </section>
+
+        <section class="cta section">
+          <p class="kicker">Try it on your own corpus</p><h2>A benchmark is a starting point.<br />Your documents are the real test.</h2>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run locally</a><a class="button secondary" href="https://github.com/aifabrice/jev-rag/discussions">Join the discussion</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent community project.</span><span>Not affiliated with TypeSafe AI, OpenRouter, or MiniMax.</span></footer>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

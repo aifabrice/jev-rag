@@ -39,6 +39,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .playwright-cli/
+output/
 .coverage
 htmlcov/
 .venv/
