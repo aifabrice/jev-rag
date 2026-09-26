@@ -1,6 +1,6 @@
 # Jev RAG
 
-**默认使用无向量 BM25 + Jev，也可切换 Embedding 混合检索的本地知识库。**
+**默认使用 BM25 + Jev，也可切换无向量 Agentic Search 或 Embedding 混合检索。**
 
 [![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
@@ -11,15 +11,17 @@
 
 ## 公开测评结果
 
-BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询，Jev 对 SQLite BM25
-召回的前 30 个候选进行重排。
+BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询。所有结果使用相同语料、
+查询、相关性标注与指标实现；候选数量和远程阶段均在方案名称中明确标注。
 
 | 方案 | nDCG@10 | MRR@10 | Recall@10 |
 | --- | ---: | ---: | ---: |
 | BM25 Top 30 | 0.305654 | 0.512697 | 0.147309 |
 | BM25 Top 30 + Jev | 0.353235 | 0.585817 | 0.158667 |
 | BM25 Top 50 + Jev | 0.362468 | 0.593023 | 0.164474 |
+| Agentic 词法检索 Top 50 | 0.380168 | 0.597940 | 0.185464 |
 | BM25 Top 50 + Embedding Top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
+| **Agentic 词法检索 Top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
 | **混合召回 Top 50 + Jev** | **0.444327** | **0.654583** | **0.214907** |
 
 以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
@@ -27,23 +29,27 @@ BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询，Jev 对 SQLite
 不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且 Top 50 参数是在同一测试集上观察的。
 
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
+· [Agentic 机器可读结果](benchmarks/nfcorpus-agentic-summary.json)
 
 ![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
 ```text
 默认：本地文件 → SQLite BM25 ──────────────────→ Jev → MiniMax
+Agentic：本地文件 → MiniMax 规划 → 多路 BM25/RRF → Jev → MiniMax
 混合：本地文件 → BM25 + OpenRouter Embedding/RRF → Jev → MiniMax
 ```
 
 Jev RAG 默认只用 SQLite FTS5/BM25，不需要 Embedding、向量数据库或 GPU。
-需要更强的语义召回时，可在网页或 CLI 切换到 BM25 + Embedding + RRF，
-然后使用同一个 Jev 证据重排和 MiniMax 引用回答链路。归一化向量矩阵缓存在本地，不需要单独的向量库。
+需要更强召回时，可在网页或 CLI 切换到 Agentic 模式，让 MiniMax 规划两轮
+本地关键词搜索，完全不建立向量索引；也可以切换到 BM25 + Embedding + RRF。
+两种模式都复用同一个 Jev 证据重排和 MiniMax 引用回答链路。
 
 > 当前状态：Alpha。适合本地试用和二次开发，但 1.0 之前接口与数据库结构可能调整。
 
 ## 核心特点
 
 - 默认 BM25 + Jev，无向量、无 Embedding、无外部索引服务。
+- 可选两轮 Agentic Search + Jev，无需向量索引即可改善同义词召回。
 - 可选 BM25 + Embedding 倒数排名融合（RRF），再进入 Jev。
 - 不需要向量数据库或 GPU，混合模式向量缓存于 `.knowledge/`。
 - 支持 Markdown、文本、HTML、JSON、CSV、YAML、DOCX 和 PDF。
@@ -97,7 +103,8 @@ jev-rag serve
 ```
 
 浏览器打开 <http://127.0.0.1:8765>。
-页面可切换 **BM25 + Jev（默认）** 和 **BM25 + Embedding + Jev**。
+页面可切换 **BM25 + Jev（默认）**、**Agentic Search + Jev** 和
+**BM25 + Embedding + Jev**。
 启动时会自动更新本地 BM25 索引；默认模式不生成 Embedding，
 也不需要向量数据库。
 
@@ -145,6 +152,8 @@ jev-rag \
 - 默认检索模式是 `bm25`。
 - BM25 最多召回 30 个文段。
 - 混合模式使用 BM25 Top 50 + Embedding Top 50，通过 RRF 保留 50 个候选（`rrf_k=60`）。
+- Agentic 模式使用两轮规划，每轮最多 5 组检索词，每组 BM25 Top 100，通过 RRF 保留 50 个候选。
+- Agentic 规划模型默认为 OpenRouter 上的 `minimax/minimax-m3`，规划结果缓存在本地。
 - 默认 Embedding 模型是 OpenRouter 上的 `openai/text-embedding-3-large`。
 - Jev 每批处理 10 个候选，多批并行执行。
 - 最多向回答模型提供 10 个证据文段。
@@ -183,6 +192,9 @@ jev-rag search '问题' --no-jev
 # 混合召回后使用 Jev 重排。
 jev-rag search '问题' --retrieval-mode hybrid
 
+# 两轮 Agentic 本地词法检索后使用 Jev，不建立向量索引。
+jev-rag search '问题' --retrieval-mode agentic
+
 # 启动后页面默认选中混合模式。
 jev-rag serve --retrieval-mode hybrid
 
@@ -206,6 +218,7 @@ jev-rag-smoke-test --dry-run
 - BM25 建库和召回完全在本地执行。
 - 默认只索引支持的文本文档，不上传整个文件夹。
 - 混合模式首次建索引会向 OpenRouter 发送文段，每次查询会发送查询文本；向量缓存在本地。
+- Agentic 模式会把问题和最多 8 条首轮命中片段发送给 OpenRouter 规划模型；检索规划缓存在本地。
 - Jev 会收到问题和候选文段内容。
 - OpenRouter 会收到问题和最终证据，用于生成答案。
 - 索引、缓存和问答记录默认保存在 `.knowledge/`。

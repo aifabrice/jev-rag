@@ -1,8 +1,8 @@
 # Architecture
 
-Jev RAG keeps a vector-free default while exposing an optional hybrid retrieval
-path. Both paths use the same remote decision-model reranker and optional answer
-generator.
+Jev RAG keeps a vector-free default while exposing optional agentic lexical and
+hybrid embedding retrieval paths. All three paths use the same remote
+decision-model reranker and optional answer generator.
 
 ```text
 documents
@@ -11,6 +11,8 @@ documents
 parsers -> heading-aware passages -> SQLite documents/passages tables
                                       |
 query -> CJK/Latin lexical tokens -> FTS5 MATCH -> BM25 top 30 --------+
+                                                                     |
+optional agentic: planner -> multi-query BM25 -> RRF top 50 ---------+
                                                                      |
 optional hybrid: BM25 top 50 + embedding top 50 -> RRF top 50 -------+
                                                                      |
@@ -48,6 +50,20 @@ The corpus matrix is cached under `.knowledge/embeddings/` and invalidated by
 the embedding model or passage-content fingerprint. There is no vector database.
 The default `bm25` mode never loads NumPy or calls the embedding endpoint.
 
+### Optional agentic lexical retrieval
+
+With `retrieval_mode=agentic`, MiniMax first generates five compact lexical
+queries using abbreviations, synonyms, and likely document terminology. The
+application executes the original and generated queries against the same local
+FTS5 index, fuses their rankings with RRF, then shows up to eight untrusted
+result snippets to a second planning round. A final RRF top 50 enters Jev.
+
+No embeddings or vector index are created. The planner receives the user query
+and second-round snippets through OpenRouter, so this mode is not offline. Plans
+are cached by model, query, round, prior queries, and observations. Planner JSON
+is schema-checked, bounded, and defensively repaired for common truncation
+errors. Retrieved snippets are explicitly treated as untrusted data.
+
 ### Jev reranking
 
 Each candidate receives a `Noul` question asking whether it contains concrete evidence useful for the query. Candidates are divided into groups of 10. Groups run concurrently and their absolute scores are merged, then ties fall back to the first-stage retrieval order.
@@ -75,9 +91,11 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 |---|---|
 | Original files | Local filesystem |
 | FTS index and run history | Local SQLite database |
+| Agentic search plans | Local SQLite cache |
 | Normalized embedding matrix (hybrid only) | Local `.knowledge/embeddings/` cache |
 | Query and BM25 candidate excerpts | Sent to the configured Jev provider |
 | Passage text and query (hybrid only) | Sent to the configured OpenRouter embedding model |
+| Query and first-round snippets (agentic only) | Sent to the configured OpenRouter planner |
 | Query and selected evidence | Sent to OpenRouter for answer generation |
 | API keys | Process environment or local `.env` |
 
@@ -85,6 +103,7 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 
 - BM25 is fast and inspectable but cannot directly capture semantic paraphrases.
 - Hybrid retrieval improves semantic recall but adds an embedding cost, a first-run indexing delay, and another remote-data boundary.
+- Agentic retrieval improves lexical recall without embeddings, but adds planner calls, query latency, provider cost, and a remote-data boundary.
 - Jev improves evidence selection but adds network latency, cost, and a remote-data boundary.
 - Batching reduces context-limit failures; scores from separate batches may not be perfectly comparable.
 - Passing more evidence can improve recall while increasing answer latency, cost, and distraction.

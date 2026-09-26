@@ -11,6 +11,9 @@ from local_kb import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_RETRIEVAL_MODE,
     KnowledgeBase,
+    _parse_agentic_queries,
+    agentic_rank_fusion,
+    agentic_retrieve,
     answer_messages,
     build_parser,
     checkout_exclude_pattern,
@@ -111,6 +114,67 @@ class PassageTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_agentic_planner_json_repairs_common_model_format_errors(self):
+        missing_brace = '```json\n{"queries":["hearing loss","deafness"]\n```'
+        wrong_array_close = '{"queries":["vitamin D2","vitamin D3"}]}'
+        self.assertEqual(
+            _parse_agentic_queries(missing_brace, 5), ["hearing loss", "deafness"]
+        )
+        self.assertEqual(
+            _parse_agentic_queries(wrong_array_close, 5), ["vitamin D2", "vitamin D3"]
+        )
+
+    def test_agentic_rrf_fuses_multiple_lexical_runs(self):
+        base = {
+            "title": "t", "heading": "h", "path": "p", "body": "b",
+            "start_line": 1, "end_line": 1, "snippet": "b",
+        }
+        original = [dict(base, rowid=1, bm25_rank=1), dict(base, rowid=2, bm25_rank=2)]
+        expanded = [dict(base, rowid=2, bm25_rank=1), dict(base, rowid=3, bm25_rank=2)]
+        fused = agentic_rank_fusion([original, expanded], limit=3, rrf_k=60)
+
+        self.assertEqual([item["rowid"] for item in fused], [2, 1, 3])
+        self.assertEqual(fused[0]["original_bm25_rank"], 2)
+        self.assertEqual(fused[0]["agentic_best_rank"], 1)
+        self.assertNotIn("bm25_rank", fused[-1])
+
+    def test_agentic_retrieval_runs_two_cached_planning_rounds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "docs"
+            root.mkdir()
+            (root / "hearing.md").write_text(
+                "Deafness and auditory loss can describe hearing impairment.", encoding="utf-8"
+            )
+            (root / "other.md").write_text("Unrelated weather notes.", encoding="utf-8")
+            kb = KnowledgeBase(Path(tmp) / "kb.db", root)
+            kb.index("none")
+            plans = [
+                (["deafness"], {"model": "planner", "elapsed_ms": 2, "usage": {"cost": 0.01}}),
+                (["auditory loss"], {"model": "planner", "elapsed_ms": 3, "usage": {"cost": 0.02}}),
+            ]
+            try:
+                with patch("local_kb.request_agentic_queries", side_effect=plans) as planner:
+                    results, meta = agentic_retrieve(
+                        kb, "hearing problem", rounds=2, queries_per_round=1, top_k=10
+                    )
+                self.assertEqual(planner.call_count, 2)
+                self.assertEqual(results[0]["path"], "hearing.md")
+                self.assertEqual(meta["mode"], "agentic")
+                self.assertAlmostEqual(meta["agentic"]["usage"]["cost"], 0.03)
+
+                with patch("local_kb.request_agentic_queries") as cached_planner:
+                    cached_results, cached_meta = agentic_retrieve(
+                        kb, "hearing problem", rounds=2, queries_per_round=1, top_k=10
+                    )
+                cached_planner.assert_not_called()
+                self.assertEqual(cached_results[0]["path"], "hearing.md")
+                self.assertEqual(cached_meta["agentic"]["usage"], {})
+                self.assertTrue(
+                    all(item["cache_hit"] for item in cached_meta["agentic"]["planner_rounds"])
+                )
+            finally:
+                kb.close()
+
     def test_rrf_combines_bm25_and_vector_ranks(self):
         base = {
             "title": "t", "heading": "h", "path": "p", "body": "b",
@@ -218,8 +282,10 @@ class SearchTests(unittest.TestCase):
                 run_id = kb.record_answer_run(
                     {
                         "query": "q", "generator_model": "m", "use_jev": True,
+                        "retrieval_mode": "agentic", "agentic_model": "planner",
                         "candidate_count": 2, "returned_count": 1, "lexical_ms": 1.0,
-                        "jev_ms": 2.0, "first_token_ms": 3.0, "generation_ms": 4.0,
+                        "agentic_ms": 1.5, "jev_ms": 2.0,
+                        "first_token_ms": 3.0, "generation_ms": 4.0,
                         "total_ms": 5.0, "prompt_tokens": 10, "completion_tokens": 2,
                         "cost": 0.001, "answer": "a", "sources": [{"path": "a.md"}],
                     }
@@ -227,6 +293,7 @@ class SearchTests(unittest.TestCase):
                 self.assertEqual(run_id, 1)
                 self.assertEqual(kb.status()["answer_runs"], 1)
                 self.assertEqual(kb.recent_answer_runs(1)[0]["query"], "q")
+                self.assertEqual(kb.recent_answer_runs(1)[0]["agentic_model"], "planner")
             finally:
                 kb.close()
 
