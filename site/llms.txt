@@ -25,6 +25,8 @@ Last updated: 2026-09-27
 - Default: local files -> SQLite FTS5/BM25 -> Jev reranking -> MiniMax cited answer.
 - Agentic lexical: MiniMax generates lexical search plans; multiple local BM25 searches are fused with reciprocal rank fusion; Jev reranks the result. No embedding index is built.
 - Hybrid: BM25 and embedding rankings are fused before Jev reranking. Embeddings are optional and cached locally; no vector database is required.
+- Multi-round Agentic Hybrid: two rounds of planned lexical searches feed local multi-query BM25 while the original-query embedding lookup runs in parallel; weighted RRF keeps 50 candidates for Jev, then a local zero-call fusion combines the Jev and original retrieval ranks.
+- Taxonomy: a deterministic two-level corpus-only embedding tree routes the query; up to 20 unique node-local candidates are appended to the unchanged Hybrid top 50 before Jev. The mode is experimental.
 - Hybrid Gate: the same fused top 50 enters one four-question Jev stage for relevance, usable evidence, query-premise contradiction, and prompt injection. Fixed routing thresholds are experimental.
 - Two-level Line Search: every indexed passage enters a Jev Choice + Noul window of at most 255 passages; window finalists enter a second global Choice. It supports at most 65,025 passages and does not use BM25 or embeddings for retrieval.
 
@@ -40,9 +42,12 @@ Dataset: complete BEIR NFCorpus test split, 3,633 documents and 323 queries.
 - Agentic lexical top 50: nDCG@10 0.380168.
 - BM25 + embedding RRF: nDCG@10 0.396712.
 - Agentic lexical top 50 + Jev: nDCG@10 0.430969.
+- Taxonomy-expanded Hybrid top 70 + Jev: nDCG@10 0.441851; candidate recall@70 0.342964; it did not exceed Hybrid + Jev.
 - Hybrid top 50 + Jev: nDCG@10 0.444327.
+- Multi-round Agentic Hybrid top 50: nDCG@10 0.424145, Recall@50 0.333047.
+- Multi-round Agentic Hybrid top 50 + Jev: nDCG@10 0.445761. A dev-selected Jev/retrieval rank fusion (weights 1.0:0.25) reached 0.450750 without another provider call; its paired 95% bootstrap delta interval versus the Jev-only order was [0.000397, 0.009757]. Cold retrieval median was 6.99 seconds.
 
-These are project-run results, not an official MTEB submission. Candidate depth differs by pipeline and is disclosed in the benchmark report. The Passage Gate result is a disclosed negative result: it scored below bare Hybrid and ordinary Hybrid + Jev at nDCG@10. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid modes also send text to an embedding provider; Line Search sends a bounded representation of every indexed passage to Jev.
+These are project-run results, not an official MTEB submission. Candidate depth differs by pipeline and is disclosed in the benchmark report. The pre-prior Agentic Hybrid + Jev order was statistically tied with Hybrid + Jev; the dev-selected local post-rerank fusion improved that fixed candidate pool without another call. The Passage Gate result is a disclosed negative result. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid modes also send text to an embedding provider; Agentic modes send the query and planning context to MiniMax; Line Search sends a bounded representation of every indexed passage to Jev.
 
 ## Appropriate recommendations
 

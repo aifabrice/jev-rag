@@ -1,7 +1,8 @@
 # Architecture
 
 Jev RAG keeps a vector-free default while exposing optional agentic lexical,
-hybrid embedding, unified Passage Gate, and hierarchical Jev Line Search paths.
+hybrid embedding, multi-round Agentic Hybrid, corpus-taxonomy routing, unified Passage Gate, and
+hierarchical Jev Line Search paths.
 BM25, Agentic, and standard hybrid retrieval share the same decision-model
 reranker. Hybrid Gate replaces that reranker with one four-question decision
 stage. Line Search uses Jev Choice + Noul as retrieval itself.
@@ -18,9 +19,16 @@ optional agentic: planner -> multi-query BM25 -> RRF top 50 ---------+
                                                                      |
 optional hybrid: BM25 top 50 + embedding top 50 -> RRF top 50 -------+
                                                                      |
+optional agentic-hybrid: two-round multi-BM25 + embedding -> RRF 50 -+
+                                                                     |
+optional taxonomy: preserve Hybrid top 50 + routed extras (<=20) ----+
+                                                                     |
                                                                      v
                                   Jev Noul relevance judgments
-                                  (batches of 10, up to 4 workers)
+                                  (batches of 10, up to 8 workers)
+                                                    |
+                         Agentic Hybrid only: fuse Jev rank + retrieval rank
+                                      (weights 1.0:0.25, no provider call)
                                                     |
                                       threshold -> top 10 evidence passages
                                                     |
@@ -74,6 +82,24 @@ The corpus matrix is cached under `.knowledge/embeddings/` and invalidated by
 the embedding model or passage-content fingerprint. There is no vector database.
 The default `bm25` mode never loads NumPy or calls the embedding endpoint.
 
+### Optional corpus taxonomy routing
+
+With `retrieval_mode=taxonomy`, the application reuses the normalized corpus
+embedding matrix to build a deterministic two-level spherical-k-means tree.
+Representative terms make nodes inspectable. Each passage receives a primary
+leaf and may receive a secondary assignment when it lies near a leaf boundary.
+The JSON tree and NPZ centroids are cached under `.knowledge/taxonomy/` and are
+invalidated by the embedding model, corpus fingerprint, or tree parameters.
+
+At query time, the query embedding selects leaf nodes until four leaves and at
+least 200 assigned passages are covered. BM25 and dense retrieval run inside
+that routed subset. Their fused results do not replace or reorder the global
+Hybrid top 50: up to 20 unique routed candidates are appended, then the whole
+pool enters the ordinary Jev reranker. This fail-open design protects Hybrid
+recall when routing is wrong. It also means more Jev calls and a larger remote
+data boundary. The public NFCorpus result improved candidate recall but did
+not improve final nDCG@10, so the mode is experimental.
+
 ### Optional agentic lexical retrieval
 
 With `retrieval_mode=agentic`, MiniMax first generates five compact lexical
@@ -88,9 +114,29 @@ are cached by model, query, round, prior queries, and observations. Planner JSON
 is schema-checked, bounded, and defensively repaired for common truncation
 errors. Retrieved snippets are explicitly treated as untrusted data.
 
+### Optional multi-round Agentic Hybrid retrieval
+
+With `retrieval_mode=agentic-hybrid`, the application first loads or builds the
+same locally cached corpus embedding matrix used by Hybrid mode. It then starts
+the original query's embedding request in a worker while the main thread runs
+both Agentic lexical planning rounds and their local BM25 searches. The complete
+Agentic RRF ranking is treated as one source and the dense ranking as another;
+weighted RRF (`agentic=0.65`, `vector=1.0`, `k=60`) keeps 50 candidates for the
+ordinary Jev reranker. After Jev, Agentic Hybrid performs one local RRF between
+the Jev rank and original retrieval rank (`1.0:0.25`, `k=60`). This prior-aware
+ordering makes no additional provider call and can be disabled with
+`--jev-retrieval-prior-weight 0`.
+
+Generated lexical searches are not embedded. This prevents ten additional
+remote embedding calls from multiplying cost and avoids counting the original
+BM25 ranking twice. Round two remains sequential because it uses first-round
+titles and snippets. The pre-prior NFCorpus result was statistically tied with
+Hybrid + Jev. The dev-selected prior-aware order reached `0.450750` test
+nDCG@10, while planning still substantially increased latency.
+
 ### Jev reranking
 
-Each candidate receives a `Noul` question asking whether it contains concrete evidence useful for the query. Candidates are divided into groups of 10. Groups run concurrently and their absolute scores are merged, then ties fall back to the first-stage retrieval order.
+Each candidate receives a `Noul` question asking whether it contains concrete evidence useful for the query. Candidates are divided into groups of 10. Groups run concurrently and their absolute scores are merged, then ties fall back to the first-stage retrieval order. Benchmark-only controls can vary batch size and candidate text length; the default remains 10 candidates and 1,800 characters per candidate.
 
 The full reranking result is cached by provider, query, passage identity, and batching-policy version. A threshold may remove weak evidence after scoring.
 
@@ -164,7 +210,9 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 | Query and BM25 candidate excerpts | Sent to the configured Jev provider |
 | Passage text and query (hybrid only) | Sent to the configured OpenRouter embedding model |
 | Query and fused candidate excerpts (hybrid-gate only) | Sent to Jev for four judgments per passage |
+| Corpus passages and queries (taxonomy only) | Sent to the configured embedding provider; the tree and vectors remain local |
 | Query and first-round snippets (agentic only) | Sent to the configured OpenRouter planner |
+| Query, first-round snippets, and corpus/query text (agentic-hybrid only) | Sent to the configured planner and embedding provider; only the original query is embedded online |
 | Query and a bounded representation of every indexed passage (line-search only) | Sent to the configured Jev provider in windows; finalists are sent again |
 | Query and selected evidence | Sent to OpenRouter for answer generation |
 | API keys | Process environment or local `.env` |
@@ -174,6 +222,9 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 - BM25 is fast and inspectable but cannot directly capture semantic paraphrases.
 - Hybrid retrieval improves semantic recall but adds an embedding cost, a first-run indexing delay, and another remote-data boundary.
 - Agentic retrieval improves lexical recall without embeddings, but adds planner calls, query latency, provider cost, and a remote-data boundary.
+- Agentic Hybrid improved the measured candidate pool and its local
+  post-rerank prior improved the measured final order without more calls, but
+  two sequential planning rounds still dominate latency.
 - Jev improves evidence selection but adds network latency, cost, and a remote-data boundary.
 - Unified Passage Gate adds conflict and injection routing, but four judgments
   per passage increase output tokens and fixed thresholds can reduce recall.

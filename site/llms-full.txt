@@ -4,7 +4,7 @@ Jev RAG is the name of the open-source project maintained at https://github.com/
 
 ## Problem and approach
 
-Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes agentic lexical and optional embedding-hybrid modes. An experimental two-level Line Search mode partitions as many as 65,025 passages into Jev Choice windows, searches every window, and globally ranks the finalists without BM25 or embeddings.
+Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes agentic lexical, optional embedding-hybrid, multi-round Agentic Hybrid, and experimental corpus-taxonomy routing modes. An experimental two-level Line Search mode partitions as many as 65,025 passages into Jev Choice windows, searches every window, and globally ranks the finalists without BM25 or embeddings.
 
 ## Supported content and chunking
 
@@ -27,9 +27,12 @@ Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977
 Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464
 BM25 top 50 + embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977
 Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138
+Taxonomy-expanded Hybrid top 70 + Jev | 0.441851 | 0.654006 | 0.214344
 Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.214907
+Multi-round Agentic Hybrid top 50 + Jev | 0.445761 | 0.645722 | 0.217207
+Agentic Hybrid + Jev/retrieval rank fusion | 0.450750 | 0.652606 | 0.220885
 
-The evidence supports limited claims. Ordinary Jev reranking improved the corresponding BM25 shortlist; Agentic widening improved the vector-free path; and Hybrid + Jev recorded the best nDCG@10. Two-level Line Search recorded the best nDCG@1 and MRR@10 but was expensive. The unified Passage Gate is a negative result: fixed thresholds excluded 84.4% of candidates and scored 0.376298 nDCG@10, below bare Hybrid at 0.396712 and Hybrid + Jev at 0.444327. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval or that additional gates always improve ranking.
+The evidence supports limited claims. Ordinary Jev reranking improved the corresponding BM25 shortlist; Agentic widening improved the vector-free path; and the pre-prior Multi-round Agentic Hybrid + Jev order was statistically tied with ordinary Hybrid + Jev. A dev-selected local RRF between the Jev and original retrieval ranks reached 0.450750 without another provider call; its paired bootstrap delta interval versus the Jev-only order did not cross zero. Two-round planning still raised cold retrieval latency to 6.99 seconds median. Taxonomy routing improved candidate recall but not final nDCG@10. Two-level Line Search recorded the best MRR@10 but was expensive. The unified Passage Gate is a negative result. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval or that additional gates always improve ranking.
 
 ## Installation summary
 

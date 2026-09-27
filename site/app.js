@@ -7,7 +7,9 @@ const pipelines = {
   agentic: { label: "Agentic lexical top 50", ndcg: 0.380168, mrr: 0.597940, recall: 0.185464, note: "Generated lexical search terms expand the local FTS5 search without creating embeddings." },
   rrf: { label: "BM25 + embedding RRF", ndcg: 0.396712, mrr: 0.632089, recall: 0.193977, note: "Reciprocal-rank fusion combines BM25 top 50 with embedding top 50 before reranking." },
   agenticJev: { label: "Agentic lexical top 50 + Jev", ndcg: 0.430969, mrr: 0.644041, recall: 0.204138, note: "Agent-generated search terms widen local recall, then Jev reranks the top 50 passages." },
+  taxonomy: { label: "Taxonomy-expanded Hybrid top 70 + Jev", ndcg: 0.441851, mrr: 0.654006, recall: 0.214344, note: "A corpus-only two-level taxonomy appends up to 20 routed candidates. Pool recall improved to 0.342964 at 70, but nDCG@10 remained slightly below Hybrid + Jev." },
   hybrid: { label: "Hybrid top 50 + Jev", ndcg: 0.444327, mrr: 0.654583, recall: 0.214907, note: "BM25 and embedding rankings are fused with RRF before Jev reranks the evidence." },
+  agenticHybrid: { label: "Agentic Hybrid + Jev/retrieval fusion", ndcg: 0.450750, mrr: 0.652606, recall: 0.220885, note: "A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning still raised cold retrieval latency to 6.99 s median." },
 };
 const fields = {
   label: document.querySelector("#selected-label"), score: document.querySelector("#selected-score"),
@@ -26,4 +28,4 @@ document.querySelector("#copy-command").addEventListener("click", async (event) 
   try { await navigator.clipboard.writeText("git clone https://github.com/aifabrice/jev-rag.git"); event.currentTarget.textContent = "Copied"; window.setTimeout(() => { event.currentTarget.textContent = "Copy"; }, 1400); }
   catch { event.currentTarget.textContent = "Select text"; }
 });
-renderPipeline("hybrid");
+renderPipeline("agenticHybrid");

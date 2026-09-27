@@ -1,6 +1,6 @@
 # Jev RAG
 
-**Jev RAG is an open-source local knowledge search engine with five selectable pipelines: BM25 + Jev by default, agentic lexical search, embedding hybrid retrieval, a unified Jev Passage Gate, and hierarchical Jev Line Search.**
+**Jev RAG is an open-source local knowledge search engine with seven selectable pipelines: BM25 + Jev by default, agentic lexical search, embedding hybrid retrieval, multi-round Agentic Hybrid, taxonomy-routed hybrid retrieval, a unified Jev Passage Gate, and hierarchical Jev Line Search.**
 
 Use Jev RAG to search a local document folder, rerank candidate passages with
 Jev, and stream grounded answers with file citations. The default path is a
@@ -34,8 +34,12 @@ sizes and remote stages are shown explicitly.
 | Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977 |
 | Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464 |
 | BM25 top 50 + Embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
+| Multi-round Agentic Hybrid top 50 | 0.424145 | 0.637722 | 0.206303 |
 | **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
-| **Hybrid top 50 + Jev** | **0.444327** | **0.654583** | **0.214907** |
+| Taxonomy-expanded Hybrid top 70 + Jev | 0.441851 | 0.654006 | 0.214344 |
+| Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 |
+| Multi-round Agentic Hybrid top 50 + Jev | 0.445761 | 0.645722 | 0.217207 |
+| **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.220885** |
 
 Line Search achieved the strongest first-hit behavior (`nDCG@1=0.554180`),
 but lower multi-document ranking quality and recall than Agentic or Hybrid.
@@ -49,8 +53,27 @@ cookbook-inspired fixed thresholds it excluded 13,631 of 16,150 candidates
 prompt-injection screening and query-premise checks, but it is not the default
 quality path.
 
+Taxonomy routing is also reported without cherry-picking. Its corpus-only tree
+raised candidate recall from `0.318075` at 50 to `0.342964` at 70, but final
+nDCG@10 was `0.441851`, slightly below Hybrid + Jev. It is useful as a candidate
+expansion experiment, not a new best-score claim.
+
+Multi-round Agentic Hybrid produced the highest nDCG@10 point estimate,
+`0.445761`, but only `+0.001434` over ordinary Hybrid + Jev. The paired
+20,000-sample bootstrap 95% interval (`[-0.006883, 0.009834]`) crosses zero;
+97 queries improved, 142 tied, and 84 degraded. Treat the two pipelines as
+statistically tied. The new mode improved candidate Recall@50 to `0.333047`,
+but its cold retrieval-only median was `6.99 s` and p95 was `24.39 s` because
+two planning rounds run per query.
+
+A second, dev-selected RRF step now preserves part of the original retrieval
+order after Jev (Jev rank weight `1.0`, retrieval rank weight `0.25`). It adds
+no provider call and raised test nDCG@10 from `0.445761` to `0.450750`.
+Against the Jev-only order, 100 queries improved, 158 tied, and 65 degraded;
+the paired bootstrap 95% interval for the delta was `[0.000397, 0.009757]`.
+
 On the [MTEB NFCorpus page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
-observed on 2026-09-26, inserting `0.444327`
+observed on 2026-09-26, inserting `0.450750`
 numerically would place this run at approximately **#4 of 251 results (top
 1.6%)**. This is an **unofficial comparison**, not an MTEB leaderboard rank:
 the multi-stage pipeline has not been submitted to MTEB, and its top-50
@@ -60,6 +83,8 @@ configuration was evaluated on the same test set.
 · [Machine-readable Agentic summary](benchmarks/nfcorpus-agentic-summary.json)
 · [Machine-readable Line Search summary](benchmarks/nfcorpus-line-search-summary.json)
 · [Machine-readable Passage Gate summary](benchmarks/nfcorpus-passage-gate-summary.json)
+· [Machine-readable Taxonomy summary](benchmarks/nfcorpus-taxonomy-summary.json)
+· [Machine-readable Agentic Hybrid summary](benchmarks/nfcorpus-agentic-hybrid-summary.json)
 
 ![Jev RAG local web interface](docs/assets/demo-ui.png)
 
@@ -67,12 +92,14 @@ configuration was evaluated on the same test set.
 default: local files -> SQLite BM25 ----------------------> Jev -> MiniMax
 agentic: local files -> MiniMax plans -> multi-BM25/RRF --> Jev -> MiniMax
 hybrid:  local files -> BM25 + OpenRouter embeddings/RRF -> Jev -> MiniMax
+agentic-hybrid: two-round plans -> multi-BM25 + embedding/RRF -> Jev + retrieval prior -> MiniMax
+taxonomy: local files -> corpus taxonomy -> Hybrid top 50 + routed extras -> Jev -> MiniMax
 gate:    local files -> BM25 + embeddings/RRF -> unified Jev Gate -> MiniMax
 line:    local files -> parallel Jev Choice windows -> global Choice -> MiniMax
 ```
 
 Jev RAG indexes a local folder and defaults to vector-free SQLite FTS5/BM25.
-The web UI and CLI expose five modes. Agentic mode runs two rounds of
+The web UI and CLI expose seven modes. Agentic mode runs two rounds of
 model-planned local lexical searches and fuses them before Jev, without an
 embedding index. Hybrid mode fuses BM25 and embedding rankings before Jev. No
 vector database is required: the optional normalized embedding matrix is cached
@@ -83,6 +110,18 @@ searches every window with Jev Choice + Noul, and globally re-ranks the window
 finalists with a second Choice request. The UI streams cited answers and reports
 each pipeline stage's latency.
 
+Agentic Hybrid keeps those two planning rounds, runs their multi-query BM25
+branch alongside an original-query embedding lookup, then fuses the Agentic and
+dense rankings with weighted RRF (`0.65:1.0`) before the same Jev reranker.
+The Agentic Hybrid path then blends the Jev rank with the original retrieval
+rank at `1.0:0.25`; this post-rerank step is local and makes no provider call.
+
+Taxonomy mode deterministically clusters the cached corpus embeddings into two
+levels, routes each query to four leaf nodes, and appends up to 20 unique routed
+candidates to the unchanged Hybrid top 50 before the ordinary Jev stage. The
+tree is built from corpus documents only; benchmark queries and qrels are not
+used.
+
 > Status: alpha. The software is usable locally, but APIs and storage schemas may change before 1.0.
 
 ## Why this project
@@ -90,6 +129,12 @@ each pipeline stage's latency.
 - Vector-free BM25 + Jev remains the default; no embedding setup is required.
 - Optional two-round Agentic Search + Jev improves lexical recall without building embeddings.
 - Optional BM25 + Embedding reciprocal-rank fusion before the same Jev stage.
+- Optional two-round Agentic BM25 + original-query embedding fusion before Jev.
+  A dev-selected local Jev/retrieval rank fusion improves the measured final
+  order without another provider call, but planning still adds substantial
+  latency.
+- Optional two-level corpus taxonomy for query routing and Hybrid candidate
+  expansion. The public benchmark improved pool recall but not nDCG@10.
 - Optional Hybrid + Unified Jev Passage Gate for relevance, answer-evidence,
   contradiction, and prompt-injection routing. The fixed profile is
   experimental and did not improve NFCorpus nDCG@10.
@@ -108,12 +153,12 @@ each pipeline stage's latency.
 
 ## How it differs from vector RAG
 
-| | Default | Agentic | Hybrid | Hybrid Gate | Line Search |
-|---|---|---|---|---|---|
-| First stage | SQLite FTS5/BM25 | Planned multi-BM25 + RRF | BM25 + embedding RRF | BM25 + embedding RRF | Parallel Jev Choice windows |
-| Second stage | Jev reranking | Jev reranking | Jev reranking | Unified four-question Jev gate | Global Jev Choice |
-| Vector index | No | No | Local cached matrix | Local cached matrix | No |
-| Main trade-off | Can miss synonyms | Planner latency/cost | Embedding boundary | Aggressive filtering; four judgments per passage | Full corpus remotely; highest cost |
+| | Default | Agentic | Hybrid | Agentic Hybrid | Taxonomy | Hybrid Gate | Line Search |
+|---|---|---|---|---|---|---|---|
+| First stage | SQLite FTS5/BM25 | Planned multi-BM25 + RRF | BM25 + embedding RRF | Planned multi-BM25 + embedding RRF | Hybrid top 50 + taxonomy extras | BM25 + embedding RRF | Parallel Jev Choice windows |
+| Second stage | Jev reranking | Jev reranking | Jev reranking | Jev reranking | Jev reranking | Unified four-question Jev gate | Global Jev Choice |
+| Vector index | No | No | Local cached matrix | Local cached matrix | Local cached matrix + tree | Local cached matrix | No |
+| Main trade-off | Can miss synonyms | Planner latency/cost | Embedding boundary | Highest measured point estimate; high planner latency | More recall, candidates, and Jev cost | Aggressive filtering; four judgments per passage | Full corpus remotely; highest cost |
 
 This is a deliberate retrieval architecture, not a claim that lexical search always beats embeddings. Measure it on your own documents and questions.
 
@@ -163,8 +208,9 @@ jev-rag serve
 ```
 
 Open <http://127.0.0.1:8765>. The server binds to localhost by default.
-Choose **BM25 + Jev** (default), **Agentic Search + Jev**, or
-**BM25 + Embedding + Jev**, or **Two-level Line-by-line Search** in the UI.
+Choose **BM25 + Jev** (default), **Agentic Search + Jev**,
+**BM25 + Embedding + Jev**, **Multi-round Agentic + BM25 + Embedding + Jev**,
+or one of the experimental routing/search modes in the UI.
 Startup incrementally updates the local BM25 index. The default mode does not
 create embeddings and does not require a vector database.
 
@@ -214,6 +260,12 @@ The web application currently uses:
 - Retrieval mode: `bm25` by default
 - BM25 candidates: up to 30 passages
 - Hybrid mode: BM25 top 50 + embedding top 50, RRF top 50 (`rrf_k=60`)
+- Agentic Hybrid mode: two planning rounds with five lexical queries per
+  round; multi-query BM25 runs alongside the original-query embedding lookup;
+  weighted RRF (`0.65:1.0`) keeps 50 candidates for Jev, then a zero-call
+  Jev/retrieval rank fusion (`1.0:0.25`) produces the final order
+- Taxonomy mode: preserve Hybrid top 50, route over a cached two-level corpus
+  tree, then append up to 20 unique node-local candidates before Jev
 - Hybrid Gate mode: the same fused top 50, then one Jev stage asks four `Noul`
   questions per passage and applies fixed relevance/evidence/conflict/injection thresholds
 - Agentic mode: two planning rounds, five lexical queries per round, BM25 top 100 per query, RRF top 50
@@ -261,11 +313,17 @@ jev-rag search 'query' --no-jev
 # Optional hybrid retrieval followed by Jev.
 jev-rag search 'query' --retrieval-mode hybrid
 
+# Experimental corpus-taxonomy routing plus Hybrid candidate expansion.
+jev-rag search 'query' --retrieval-mode taxonomy
+
 # Hybrid retrieval followed by one unified Jev Passage Gate (experimental).
 jev-rag search 'query' --retrieval-mode hybrid-gate
 
 # Agent-planned local lexical searches followed by Jev; no vector index.
 jev-rag search 'query' --retrieval-mode agentic
+
+# Two-round Agentic BM25 plus parallel original-query embedding, then Jev.
+jev-rag search 'query' --retrieval-mode agentic-hybrid
 
 # Search every indexed passage with parallel Jev windows, then globally rank finalists.
 jev-rag search 'query' --retrieval-mode line-search
