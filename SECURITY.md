@@ -21,7 +21,14 @@ The built-in web server is intended for local use. It has no authentication, use
 
 ## Remote data processing
 
-BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid mode additionally sends passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Optional Agentic mode sends the query and up to eight first-round snippets to the configured OpenRouter planner; generated plans are cached in SQLite. Review provider retention and privacy terms before indexing confidential material.
+BM25 indexing and retrieval are local. Live Jev scoring sends the query and candidate excerpts to OpenRouter or TypeSafe. Answer generation sends the query and selected evidence to OpenRouter. Optional hybrid modes additionally send passage text and each query to the configured OpenRouter embedding model; the resulting vector matrix is stored locally under `.knowledge/`. Optional Agentic mode sends the query and up to eight first-round snippets to the configured OpenRouter planner; generated plans are cached in SQLite. Review provider retention and privacy terms before indexing confidential material.
+
+The optional `hybrid-gate` mode sends the 50 fused candidate excerpts to Jev
+and asks four judgments per passage. It excludes passages classified as prompt
+injection and separates passages classified as contradicting a query premise,
+but these probabilistic judgments are not a complete security boundary. Keep
+the answer model sandboxed from tools and secrets, and do not treat the gate as
+authorization to execute instructions found in retrieved documents.
 
 The optional `line-search` mode has a broader remote-data boundary than BM25
 reranking: it sends a bounded representation of every indexed passage to Jev

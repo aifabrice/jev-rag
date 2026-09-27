@@ -4,6 +4,21 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
+### Added
+
+- A fifth `hybrid-gate` mode: BM25 top 50 and embedding top 50 are fused with
+  RRF, then one unified Jev stage evaluates relevance, usable answer evidence,
+  contradiction of a query premise, and prompt injection for every candidate.
+- Official-cookbook-inspired routing with separate normal and conflicting
+  evidence blocks for answer generation, plus prompt-injection exclusion.
+- CLI, HTTP, web UI, cache, benchmark, latency, route-count, and cost support
+  for the unified Passage Gate.
+- Complete 323-query BEIR NFCorpus disclosure. The fixed gate scored 0.376298
+  nDCG@10 versus 0.396712 for bare Hybrid and 0.444327 for Hybrid + Jev, while
+  excluding 84.4% of candidates; it is therefore experimental and not default.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

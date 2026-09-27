@@ -218,6 +218,46 @@ embedding model.
 The compact disclosure is stored in
 [`nfcorpus-line-search-summary.json`](nfcorpus-line-search-summary.json).
 
+## Hybrid + Unified Jev Passage Gate experiment
+
+On 2026-09-27, version 0.5.0 kept the strongest Hybrid retrieval configuration
+(BM25 top 50 + `openai/text-embedding-3-large` top 50 + RRF top 50) and replaced
+ordinary Jev reranking with one unified Passage Gate. For every candidate, the
+same decision request produced four `Noul` probabilities: relevance, usable
+answer evidence, contradiction of a query premise, and prompt injection.
+
+| Pipeline | nDCG@1 | nDCG@10 | MRR@10 | MAP@10 | Recall@10 | Recall@50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bare Hybrid retrieval | 0.524252 | 0.396712 | 0.632089 | 0.295243 | 0.193977 | 0.318075 |
+| Hybrid + Unified Passage Gate | 0.530444 | 0.376298 | 0.618043 | 0.276441 | 0.166977 | 0.180129 |
+| Hybrid + ordinary Jev reranking | **0.552116** | **0.444327** | **0.654583** | **0.337663** | **0.214907** | **0.318075** |
+
+The gate slightly improved nDCG@1 over bare Hybrid by 0.006192, but reduced
+nDCG@10 by 0.020414 and Recall@10 by 0.027000. Against ordinary Jev reranking,
+nDCG@10 was 0.068029 lower (15.31% relative). The fixed routing profile kept
+2,518 candidates as normal evidence, marked one as conflicting evidence, and
+excluded 13,631: 84.40% of all 16,150 candidates. Average retained evidence was
+7.80 passages per query. The result suggests these fixed thresholds are too
+aggressive for NFCorpus graded retrieval, even though the extra judgments may
+still be useful for an application-level security or premise-checking policy.
+
+The exact cold run used 1,615 batched Jev requests, 9,815,406 input tokens,
+1,350,140 output tokens, and $0.412247052 provider cost. Median query latency
+was 1,555.05 ms and p95 was 17,469.24 ms. Embedding vectors were reused from
+the local cache. The compact disclosure is stored in
+[`nfcorpus-passage-gate-summary.json`](nfcorpus-passage-gate-summary.json).
+
+Reproduce it with:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 --rrf-k 60 \
+  --passage-gate --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-hybrid-passage-gate.json
+```
+
 ## Latency and provider usage
 
 | Mode | Median query latency | p95 query latency |

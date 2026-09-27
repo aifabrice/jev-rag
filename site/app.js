@@ -3,6 +3,7 @@ const pipelines = {
   jev30: { label: "BM25 top 30 + Jev", ndcg: 0.353235, mrr: 0.585817, recall: 0.158667, note: "Jev reranks the same 30 lexical candidates, improving all three recorded metrics." },
   jev50: { label: "BM25 top 50 + Jev", ndcg: 0.362468, mrr: 0.593023, recall: 0.164474, note: "A wider BM25 candidate pool gives Jev more evidence to recover before the top 10 cutoff." },
   lineSearch: { label: "Two-level Jev Line Search", ndcg: 0.366280, mrr: 0.657660, recall: 0.169397, note: "The best first-hit behavior, but weaker multi-document ranking than Agentic or Hybrid; 5,168 Jev requests cost $4.553288 in the full run." },
+  passageGate: { label: "Hybrid + Unified Passage Gate", ndcg: 0.376298, mrr: 0.618043, recall: 0.166977, note: "A disclosed negative result: fixed thresholds excluded 84.4% of candidates. Useful to study injection and premise routing, but weaker than bare Hybrid and ordinary Jev reranking." },
   agentic: { label: "Agentic lexical top 50", ndcg: 0.380168, mrr: 0.597940, recall: 0.185464, note: "Generated lexical search terms expand the local FTS5 search without creating embeddings." },
   rrf: { label: "BM25 + embedding RRF", ndcg: 0.396712, mrr: 0.632089, recall: 0.193977, note: "Reciprocal-rank fusion combines BM25 top 50 with embedding top 50 before reranking." },
   agenticJev: { label: "Agentic lexical top 50 + Jev", ndcg: 0.430969, mrr: 0.644041, recall: 0.204138, note: "Agent-generated search terms widen local recall, then Jev reranks the top 50 passages." },

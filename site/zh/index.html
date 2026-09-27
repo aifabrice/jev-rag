@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jev RAG 中文介绍 — 不依赖向量数据库的本地知识库检索</title>
-    <meta name="description" content="Jev RAG 是一个开源的本地知识库检索工具：默认使用 SQLite BM25 + Jev，也支持 Agentic、Embedding 混合检索与两级 Jev Line Search。" />
+    <meta name="description" content="Jev RAG 是一个开源的本地知识库检索工具：默认使用 SQLite BM25 + Jev，也支持 Agentic、Embedding 混合检索、统一 Passage Gate 与两级 Jev Line Search。" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
     <link rel="canonical" href="https://aifabrice.github.io/jev-rag/zh/" />
     <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/" />
@@ -52,7 +52,7 @@
         </section>
 
         <section>
-          <p class="kicker">四种检索路径</p>
+          <p class="kicker">五种检索路径</p>
           <h2>先用最简单的，再按需要增加语义召回。</h2>
           <table>
             <thead><tr><th>模式</th><th>流程</th><th>适合的问题</th></tr></thead>
@@ -60,6 +60,7 @@
               <tr><td><strong>默认</strong></td><td>BM25 → Jev → MiniMax</td><td>术语、编号、名称与原文有明显重合</td></tr>
               <tr><td><strong>Agentic 关键词</strong></td><td>模型生成多组检索词 → 多路 BM25/RRF → Jev</td><td>别名、同义表达、需要二轮搜索的问题；不建 embedding 索引</td></tr>
               <tr><td><strong>可选混合</strong></td><td>BM25 + embedding/RRF → Jev</td><td>对语义改写召回要求更高，能够接受额外成本和数据边界</td></tr>
+              <tr><td><strong>统一 Passage Gate</strong></td><td>BM25 + embedding/RRF → Jev 四问路由</td><td>实验相关性、证据、事实矛盾与提示注入筛查</td></tr>
               <tr><td><strong>两级 Line Search</strong></td><td>并行窗口 Choice → 全局 Choice</td><td>不用 BM25 或 embedding，直接测试 Jev 全库检索的精度上限；成本最高</td></tr>
             </tbody>
           </table>
@@ -81,11 +82,12 @@
               <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td></tr>
               <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td></tr>
               <tr><td>两级 Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td></tr>
+              <tr><td>Hybrid top 50 + 统一 Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td></tr>
               <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
               <tr><td><strong>Hybrid top 50 + Jev</strong></td><td><strong>0.444327</strong></td><td><strong>0.654583</strong></td><td><strong>0.214907</strong></td></tr>
             </tbody>
           </table>
-          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。两级 Line Search 的首条命中指标最高，但 nDCG@10 只有 0.366280；全量测试需要 5,168 次 Jev 请求，费用 $4.553288，并会把每个文档的受限长度表示发送给 Jev。</p>
+          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。统一 Passage Gate 排除了 84.4% 候选，nDCG@10 为 0.376298，低于裸 Hybrid 和普通 Jev 重排，所以它是安全路由实验，不是精度宣称。</p>
           <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">查看完整配置、费用、限制和复现命令 →</a></p>
         </section>
 

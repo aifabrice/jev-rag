@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jev RAG — Local retrieval without a vector database</title>
-    <meta name="description" content="Jev RAG is an open-source local knowledge search engine with BM25 + Jev, agentic lexical, embedding hybrid, and hierarchical Jev Line Search modes." />
+    <meta name="description" content="Jev RAG is an open-source local knowledge search engine with BM25 + Jev, agentic lexical, embedding hybrid, unified Passage Gate, and hierarchical Jev Line Search modes." />
     <meta name="author" content="aifabrice" />
     <meta name="google-site-verification" content="X69mRf8Cmz2AL3udM7xQqUrotOmok4rW7leoSX2NAbI" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -53,7 +53,7 @@
             "runtimePlatform": "Python 3.9+",
             "applicationCategory": "DeveloperApplication",
             "isAccessibleForFree": true,
-            "description": "Jev RAG is an open-source local knowledge search engine with BM25 + Jev, agentic lexical, embedding hybrid, and hierarchical Jev Line Search modes.",
+            "description": "Jev RAG is an open-source local knowledge search engine with BM25 + Jev, agentic lexical, embedding hybrid, unified Passage Gate, and hierarchical Jev Line Search modes.",
             "featureList": [
               "Local document indexing",
               "Vector-free SQLite FTS5/BM25 retrieval by default",
@@ -82,7 +82,7 @@
         <section class="hero">
           <div class="eyebrow"><span></span> Open source · MIT · Python</div>
           <h1>Local retrieval,<br /><em>without the vector tax.</em></h1>
-          <p class="lede">Jev RAG searches local documents through four selectable paths: BM25 + Jev, agentic lexical search, embedding hybrid retrieval, or hierarchical Jev Line Search. Embeddings remain optional.</p>
+          <p class="lede">Jev RAG searches local documents through five selectable paths: BM25 + Jev, agentic lexical search, embedding hybrid retrieval, a unified Jev Passage Gate, or hierarchical Jev Line Search. Embeddings remain optional.</p>
           <div class="hero-actions">
             <a class="button primary" href="https://github.com/aifabrice/jev-rag">View on GitHub</a>
             <a class="button secondary" href="#benchmark">Explore the benchmark</a>
@@ -109,10 +109,11 @@
               <button class="pipeline-option" data-pipeline="jev30" role="option"><span>02</span><div><strong>BM25 top 30 + Jev</strong><small>Vector-free default</small></div></button>
               <button class="pipeline-option" data-pipeline="jev50" role="option"><span>03</span><div><strong>BM25 top 50 + Jev</strong><small>Wider candidate set</small></div></button>
               <button class="pipeline-option" data-pipeline="lineSearch" role="option"><span>04</span><div><strong>Two-level Jev Line Search</strong><small>Best first-hit, highest cost</small></div></button>
-              <button class="pipeline-option" data-pipeline="agentic" role="option"><span>05</span><div><strong>Agentic lexical top 50</strong><small>Generated search terms</small></div></button>
-              <button class="pipeline-option" data-pipeline="rrf" role="option"><span>06</span><div><strong>BM25 + embedding RRF</strong><small>Hybrid, before Jev</small></div></button>
-              <button class="pipeline-option" data-pipeline="agenticJev" role="option"><span>07</span><div><strong>Agentic lexical + Jev</strong><small>Vector-free expansion</small></div></button>
-              <button class="pipeline-option active" data-pipeline="hybrid" role="option" aria-selected="true"><span>08</span><div><strong>Hybrid top 50 + Jev</strong><small>Best recorded nDCG@10</small></div></button>
+              <button class="pipeline-option" data-pipeline="passageGate" role="option"><span>05</span><div><strong>Hybrid + Passage Gate</strong><small>Safety routing experiment</small></div></button>
+              <button class="pipeline-option" data-pipeline="agentic" role="option"><span>06</span><div><strong>Agentic lexical top 50</strong><small>Generated search terms</small></div></button>
+              <button class="pipeline-option" data-pipeline="rrf" role="option"><span>07</span><div><strong>BM25 + embedding RRF</strong><small>Hybrid, before Jev</small></div></button>
+              <button class="pipeline-option" data-pipeline="agenticJev" role="option"><span>08</span><div><strong>Agentic lexical + Jev</strong><small>Vector-free expansion</small></div></button>
+              <button class="pipeline-option active" data-pipeline="hybrid" role="option" aria-selected="true"><span>09</span><div><strong>Hybrid top 50 + Jev</strong><small>Best recorded nDCG@10</small></div></button>
             </div>
 
             <div class="metric-stage" aria-live="polite">
@@ -126,7 +127,7 @@
             </div>
           </div>
 
-          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results on the same public test split, not an official MTEB submission. Two-level Line Search reached the best first-hit metrics but only 0.366280 nDCG@10, while its 5,168 Jev requests cost $4.553288 and sent a bounded representation of every document to Jev. <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read the full configuration and caveats →</a></div>
+          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results on the same public test split, not an official MTEB submission. Two-level Line Search reached the best first-hit metrics but only 0.366280 nDCG@10. The unified Passage Gate scored 0.376298 and excluded 84.4% of candidates, so it remains an experimental safety-routing path rather than a quality claim. <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read the full configuration and caveats →</a></div>
         </section>
 
         <section id="architecture" class="architecture section">
@@ -137,6 +138,7 @@
             <div class="flow-stack">
               <div class="flow-card"><small>Default</small><strong>SQLite FTS5 / BM25</strong><span>Fast, inspectable lexical retrieval</span></div>
               <div class="flow-card optional"><small>Optional</small><strong>Agentic or embedding retrieval</strong><span>Generated search terms or semantic recall</span></div>
+              <div class="flow-card optional"><small>Experimental</small><strong>Unified Jev Passage Gate</strong><span>Relevance, evidence, conflict and injection routing</span></div>
               <div class="flow-card optional"><small>Experimental</small><strong>Two-level Jev Line Search</strong><span>Parallel 255-passage windows, then global Choice</span></div>
             </div>
             <div class="connector"><span>Rerank</span></div>

@@ -1,0 +1,47 @@
+{
+  "benchmark": "BEIR",
+  "dataset": "nfcorpus",
+  "split": "test",
+  "queries": 323,
+  "documents": 3633,
+  "pipeline": "bm25-top50+text-embedding-3-large-top50+rrf-top50+unified-jev-passage-gate",
+  "version": "0.5.0",
+  "thresholds": {
+    "injection_exclude_above": 0.7,
+    "contradiction_route_above": 0.7,
+    "relevance_exclude_below": 0.45,
+    "evidence_include_above": 0.55
+  },
+  "metrics": {
+    "ndcg_at_1": 0.530444,
+    "ndcg_at_10": 0.376298,
+    "mrr_at_10": 0.618043,
+    "map_at_10": 0.276441,
+    "recall_at_10": 0.166977,
+    "recall_at_50": 0.180129
+  },
+  "comparisons": {
+    "bare_hybrid_ndcg_at_10": 0.396712,
+    "hybrid_plus_jev_ndcg_at_10": 0.444327,
+    "delta_vs_bare_hybrid_ndcg_at_10": -0.020414,
+    "delta_vs_hybrid_plus_jev_ndcg_at_10": -0.068029
+  },
+  "routes": {
+    "include": 2518,
+    "conflicting_evidence": 1,
+    "exclude": 13631,
+    "excluded_fraction": 0.844025,
+    "average_retained_per_query": 7.798762
+  },
+  "cold_provider_usage": {
+    "requests": 1615,
+    "input_tokens": 9815406,
+    "output_tokens": 1350140,
+    "cost_usd": 0.412247052
+  },
+  "latency_ms": {
+    "median": 1555.05,
+    "p95": 17469.24
+  },
+  "conclusion": "The fixed gate improved first-hit nDCG slightly over bare Hybrid but over-filtered candidates and reduced nDCG@10 and recall. It remains experimental and is not the default."
+}

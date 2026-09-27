@@ -1,9 +1,10 @@
 # Architecture
 
 Jev RAG keeps a vector-free default while exposing optional agentic lexical,
-hybrid embedding, and hierarchical Jev Line Search paths. BM25, Agentic, and
-hybrid retrieval share the same decision-model reranker. Line Search uses Jev
-Choice + Noul as retrieval itself.
+hybrid embedding, unified Passage Gate, and hierarchical Jev Line Search paths.
+BM25, Agentic, and standard hybrid retrieval share the same decision-model
+reranker. Hybrid Gate replaces that reranker with one four-question decision
+stage. Line Search uses Jev Choice + Noul as retrieval itself.
 
 ```text
 documents
@@ -37,6 +38,16 @@ all indexed passages -> windows of <=255 -> parallel Jev Choice + Noul
                                              |
                                              v
                                   OpenRouter answer with citations
+
+alternative hybrid-gate path:
+
+BM25 top 50 + embedding top 50 -> RRF top 50 -> one Jev Passage Gate
+                                                       |
+                         relevance + evidence + contradiction + injection
+                                                       |
+                         include | conflicting evidence | exclude
+                                                       |
+                                  OpenRouter answer with separated evidence
 ```
 
 ## Components
@@ -82,6 +93,27 @@ errors. Retrieved snippets are explicitly treated as untrusted data.
 Each candidate receives a `Noul` question asking whether it contains concrete evidence useful for the query. Candidates are divided into groups of 10. Groups run concurrently and their absolute scores are merged, then ties fall back to the first-stage retrieval order.
 
 The full reranking result is cached by provider, query, passage identity, and batching-policy version. A threshold may remove weak evidence after scoring.
+
+### Optional unified Passage Gate
+
+With `retrieval_mode=hybrid-gate`, the first stage is identical to Hybrid:
+BM25 top 50 and embedding top 50 are fused into 50 RRF candidates. Ordinary
+Jev reranking is not run. Instead, a single batched Jev stage asks four `Noul`
+questions for every passage: relevance, usable answer evidence, contradiction
+of a factual premise in the query, and prompt injection.
+
+The fixed routing profile excludes injection above 0.70, routes contradiction
+above 0.70 to a separate conflict block, excludes relevance below 0.45,
+includes answer evidence above 0.55, and excludes the rest. Normal evidence
+and conflicting evidence are separately labeled in the generator prompt.
+Responses are cached per batch of ten candidates and up to four batches run
+concurrently. This is one Jev decision stage, not reranking followed by a
+second gate.
+
+The prompt-injection judgment is probabilistic and is not a security boundary.
+The fixed thresholds also proved too aggressive on NFCorpus: 84.4% of
+candidates were excluded and nDCG@10 fell below bare Hybrid. The mode is
+therefore experimental and deliberately not the default.
 
 ### Optional two-level Line Search
 
@@ -131,6 +163,7 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 | Normalized embedding matrix (hybrid only) | Local `.knowledge/embeddings/` cache |
 | Query and BM25 candidate excerpts | Sent to the configured Jev provider |
 | Passage text and query (hybrid only) | Sent to the configured OpenRouter embedding model |
+| Query and fused candidate excerpts (hybrid-gate only) | Sent to Jev for four judgments per passage |
 | Query and first-round snippets (agentic only) | Sent to the configured OpenRouter planner |
 | Query and a bounded representation of every indexed passage (line-search only) | Sent to the configured Jev provider in windows; finalists are sent again |
 | Query and selected evidence | Sent to OpenRouter for answer generation |
@@ -142,6 +175,8 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 - Hybrid retrieval improves semantic recall but adds an embedding cost, a first-run indexing delay, and another remote-data boundary.
 - Agentic retrieval improves lexical recall without embeddings, but adds planner calls, query latency, provider cost, and a remote-data boundary.
 - Jev improves evidence selection but adds network latency, cost, and a remote-data boundary.
+- Unified Passage Gate adds conflict and injection routing, but four judgments
+  per passage increase output tokens and fixed thresholds can reduce recall.
 - Line Search avoids lexical and embedding retrieval, but evaluates the full
   corpus remotely and is substantially more expensive than shortlist reranking.
 - Batching reduces context-limit failures; scores from separate batches may not be perfectly comparable.
