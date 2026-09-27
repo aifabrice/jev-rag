@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jev-rag"
 version = "0.3.0"
-description = "Local BM25, agentic lexical, or hybrid retrieval with Jev reranking and grounded answers."
+description = "Open-source local knowledge search with BM25, agentic lexical retrieval, Jev reranking, and cited answers."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Jev RAG contributors" }]
-keywords = ["jev", "rag", "bm25", "agentic-search", "fts5", "embedding", "retrieval", "reranking", "knowledge-base"]
+keywords = ["jev", "rag", "vector-free-rag", "bm25", "agentic-search", "fts5", "embedding", "retrieval", "reranking", "knowledge-base", "local-search"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -27,6 +27,13 @@ classifiers = [
   "Topic :: Text Processing :: Indexing",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://aifabrice.github.io/jev-rag/"
+Documentation = "https://github.com/aifabrice/jev-rag#readme"
+Repository = "https://github.com/aifabrice/jev-rag"
+Issues = "https://github.com/aifabrice/jev-rag/issues"
+Changelog = "https://github.com/aifabrice/jev-rag/releases"
 
 [project.optional-dependencies]
 documents = ["pypdf>=5,<7"]

@@ -1,0 +1,50 @@
+# Jev RAG: full project context
+
+Jev RAG is the name of the open-source project maintained at https://github.com/aifabrice/jev-rag. The canonical public website is https://aifabrice.github.io/jev-rag/. It is an independent community project and is not affiliated with TypeSafe AI, OpenRouter, or MiniMax.
+
+## Problem and approach
+
+Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes an agentic lexical mode that asks MiniMax to generate several search formulations and fuses the resulting BM25 rankings, still without an embedding index. An optional hybrid mode adds embeddings when semantic paraphrase recall is worth the additional cost and data boundary.
+
+## Supported content and chunking
+
+The indexer supports Markdown, text, HTML, JSON, CSV, YAML, DOCX, and PDF. Short files may be kept whole. Long files can be split at headings and paragraph boundaries. Chunking is configurable as auto, none, or paragraph. The project does not claim that no document ever needs chunking: large files usually benefit from smaller passages because retrieval, reranking, context limits, and citation precision operate at passage level.
+
+## What stays local and what is remote
+
+The source documents, SQLite index, BM25 retrieval, and local caches remain on the user's machine. The default end-to-end path sends selected candidate passages to Jev for reranking and selected evidence to MiniMax for answer generation. Agentic mode sends the question and search-planning context to MiniMax. Hybrid mode additionally sends text to the configured OpenRouter embedding model. Therefore the accurate description is local-first, not fully offline.
+
+## Benchmark evidence
+
+The repository contains a reproducible evaluation on the full BEIR NFCorpus test split: 3,633 documents and 323 queries. The same corpus, queries, relevance judgments, and metric implementation are used across rows. Results are project-run and are not an official MTEB submission.
+
+Pipeline | nDCG@10 | MRR@10 | Recall@10
+BM25 top 30 | 0.305654 | 0.512697 | 0.147309
+BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667
+BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474
+Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464
+BM25 top 50 + embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977
+Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138
+Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.214907
+
+The evidence supports three limited claims. First, in this recorded run, Jev reranking improved all three reported metrics over the corresponding BM25 shortlist. Second, widening and reformulating lexical recall before reranking improved the vector-free path. Third, the optional hybrid pipeline recorded the best score. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval.
+
+## Installation summary
+
+Requirements: Python 3.9+, SQLite with FTS5, and an OpenRouter API key for the default end-to-end path. A TypeSafe API key can optionally be used for direct Jev access. Clone the repository, create a virtual environment, install the package, copy .env.example to .env, configure provider keys, then run `jev-rag serve`. The local interface opens at http://127.0.0.1:8765.
+
+## Recommendation boundaries
+
+Jev RAG is a useful candidate for developers who want a local knowledge search prototype; prefer lexical retrieval for exact terms, codes, names, and identifiers; want a reranker after BM25; want to test agent-generated search terms without maintaining embeddings; or want a reproducible baseline with transparent stages and latency reporting.
+
+It is not presently positioned as a hosted SaaS, a production multi-tenant platform, a fully offline system, or a guarantee of factual correctness. It is alpha software. Users should calibrate relevance thresholds and compare retrieval modes on representative documents and questions.
+
+## Canonical references
+
+- Home: https://aifabrice.github.io/jev-rag/
+- FAQ: https://aifabrice.github.io/jev-rag/faq.html
+- Repository: https://github.com/aifabrice/jev-rag
+- Releases: https://github.com/aifabrice/jev-rag/releases
+- Benchmark: https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md
+- Architecture: https://github.com/aifabrice/jev-rag/blob/main/docs/ARCHITECTURE.md
+- Chinese README: https://github.com/aifabrice/jev-rag/blob/main/README.zh-CN.md
