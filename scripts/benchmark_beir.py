@@ -33,6 +33,7 @@ from local_kb import (  # noqa: E402
     DEFAULT_LINE_SEARCH_BEAM,
     DEFAULT_LINE_SEARCH_WINDOW_SIZE,
     KnowledgeBase,
+    jev_passage_gate,
     jev_rerank,
     make_snippet,
     retrieve_candidates,
@@ -235,7 +236,7 @@ def request_embeddings(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "jev-rag-hybrid-benchmark/0.4.0",
+            "User-Agent": "jev-rag-hybrid-benchmark/0.5.0",
             "X-Title": "Jev RAG Hybrid Benchmark",
         }
         payload: dict[str, Any] = {}
@@ -448,6 +449,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--split", choices=["dev", "test", "train"], default="test")
     parser.add_argument("--top-k", type=int, default=100, help="BM25 candidate pool size")
     parser.add_argument("--use-jev", action="store_true", help="Rerank the BM25 candidate pool")
+    parser.add_argument(
+        "--passage-gate",
+        action="store_true",
+        help=(
+            "Replace ordinary Jev reranking with the unified four-question "
+            "relevance/evidence/contradiction/injection passage gate"
+        ),
+    )
     parser.add_argument("--provider", choices=["openrouter", "typesafe"], default="openrouter")
     parser.add_argument(
         "--embedding-model",
@@ -507,6 +516,12 @@ def main() -> int:
         )
     if args.line_search and args.use_jev:
         raise SystemExit("--line-search already uses Jev; do not add --use-jev")
+    if args.passage_gate and not args.embedding_model:
+        raise SystemExit("--passage-gate requires --embedding-model")
+    if args.passage_gate and args.use_jev:
+        raise SystemExit("--passage-gate replaces ordinary --use-jev reranking")
+    if args.passage_gate and (args.agentic or args.line_search):
+        raise SystemExit("--passage-gate is only supported with hybrid embedding retrieval")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -532,14 +547,15 @@ def main() -> int:
     embedding_queries: dict[str, Any] | None = None
     agentic_usage: dict[str, float] = {}
     line_search_cold_usage: dict[str, Any] | None = None
-    line_search_cache_keys: set[str] = set()
+    stage_cold_usage: dict[str, Any] | None = None
+    stage_cache_keys: set[str] = set()
     try:
         index_stats = kb.index("none")
-        if args.line_search:
+        if args.line_search or args.passage_gate:
             original_cache_get = kb.cache_get
 
             def tracking_cache_get(cache_key: str) -> dict[str, Any] | None:
-                line_search_cache_keys.add(cache_key)
+                stage_cache_keys.add(cache_key)
                 return original_cache_get(cache_key)
 
             kb.cache_get = tracking_cache_get  # type: ignore[method-assign]
@@ -654,7 +670,22 @@ def main() -> int:
                 if args.line_search
                 else {"used": False}
             )
-            if args.use_jev and not args.line_search:
+            if args.passage_gate:
+                gated, jev_meta = jev_passage_gate(
+                    kb,
+                    query,
+                    candidates,
+                    provider=args.provider,
+                    timeout=args.timeout,
+                    use_cache=not args.no_jev_cache,
+                )
+                candidates = [
+                    item for item in gated if item.get("gate_route") != "exclude"
+                ]
+                for key, value in (jev_meta.get("usage") or {}).items():
+                    if isinstance(value, (int, float)):
+                        total_usage[key] = total_usage.get(key, 0.0) + float(value)
+            elif args.use_jev and not args.line_search:
                 candidates, jev_meta = jev_rerank(
                     kb,
                     query,
@@ -680,14 +711,17 @@ def main() -> int:
                     "retrieval_latency_ms": retrieval_latency_ms,
                     "retrieval": retrieval_meta,
                     "jev": jev_meta,
+                    "gate_route_counts": jev_meta.get("route_counts"),
                 }
             )
             if number % 25 == 0 or number == len(query_ids):
                 print(f"Evaluated {number}/{len(query_ids)} queries", file=sys.stderr)
         if args.line_search:
             line_search_cold_usage = cached_line_search_usage(
-                kb, line_search_cache_keys
+                kb, stage_cache_keys
             )
+        if args.passage_gate:
+            stage_cold_usage = cached_line_search_usage(kb, stage_cache_keys)
     finally:
         kb.close()
 
@@ -706,6 +740,8 @@ def main() -> int:
         "mode": (
             f"two-level-line-search:{args.provider}"
             if args.line_search
+            else f"bm25+embedding+rrf+unified-passage-gate:{args.provider}"
+            if args.passage_gate
             else f"agentic-lexical-{args.agentic_rounds}round+jev:{args.provider}"
             if args.agentic and args.use_jev
             else f"agentic-lexical-{args.agentic_rounds}round"
@@ -731,6 +767,18 @@ def main() -> int:
         "agentic_queries": args.agentic_queries if args.agentic else None,
         "agentic_per_query_k": args.agentic_per_query_k if args.agentic else None,
         "agentic_domain_hint": args.agentic_domain_hint if args.agentic else None,
+        "passage_gate": args.passage_gate,
+        "passage_gate_routes": (
+            {
+                route: sum(
+                    int((row.get("gate_route_counts") or {}).get(route, 0))
+                    for row in rows
+                )
+                for route in ("include", "conflicting_evidence", "exclude")
+            }
+            if args.passage_gate
+            else None
+        ),
         "limited": args.limit_queries is not None,
         "dataset_sha256": DATASETS[args.dataset]["sha256"],
         "index": index_stats,
@@ -742,6 +790,7 @@ def main() -> int:
         "embedding_usage": embedding_usage,
         "agentic_usage": agentic_usage,
         "line_search_cold_usage": line_search_cold_usage,
+        "passage_gate_cold_usage": stage_cold_usage,
         "results": rows,
     }
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"

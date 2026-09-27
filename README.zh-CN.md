@@ -1,6 +1,6 @@
 # Jev RAG
 
-**Jev RAG 是一个开源的本地知识库检索工具，提供四种可切换路径：默认 BM25 + Jev、无向量 Agentic Search、Embedding 混合检索，以及两级 Jev Line Search。**
+**Jev RAG 是一个开源的本地知识库检索工具，提供五种可切换路径：默认 BM25 + Jev、无向量 Agentic Search、Embedding 混合检索、统一 Jev Passage Gate，以及两级 Jev Line Search。**
 
 它可以搜索本地文件夹，用 Jev 对候选文段重排，再由回答模型输出带文件引用的答案。默认路径不需要 Embedding 或向量数据库。准确地说，Jev RAG 是“本地优先”而不是“完全离线”：选中的候选文段会发送给配置的 Jev 与回答模型服务。
 
@@ -27,6 +27,7 @@ BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询。所有结果�
 | BM25 Top 30 + Jev | 0.353235 | 0.585817 | 0.158667 |
 | BM25 Top 50 + Jev | 0.362468 | 0.593023 | 0.164474 |
 | 两级 Jev Line Search（60 个优胜候选） | 0.366280 | **0.657660** | 0.169397 |
+| Hybrid Top 50 + 统一 Passage Gate | 0.376298 | 0.618043 | 0.166977 |
 | Agentic 词法检索 Top 50 | 0.380168 | 0.597940 | 0.185464 |
 | BM25 Top 50 + Embedding Top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
 | **Agentic 词法检索 Top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
@@ -36,6 +37,11 @@ Line Search 的首条命中表现最好（`nDCG@1=0.554180`），但多文档排
 都低于 Agentic 和 Hybrid。全语料冷跑的供应商费用为 `$4.553288`，因此它属于
 实验性深度检索路径，不作为默认方案。
 
+统一 Passage Gate 是一个如实披露的负结果：按 Cookbook 启发的固定阈值，
+它排除了 16,150 个候选中的 13,631 个（84.4%），nDCG@10 低于裸
+Hybrid（0.396712）和 Hybrid + Jev（0.444327）。它仍作为提示注入筛查与
+问题前提检查的实验模式，但不是默认精度路径。
+
 以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
 `0.444327` 约为 **251 个结果中第 4（Top 1.6%）**。这是一个**非官方的数值比较**，
 不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且 Top 50 参数是在同一测试集上观察的。
@@ -43,6 +49,7 @@ Line Search 的首条命中表现最好（`nDCG@1=0.554180`），但多文档排
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
 · [Agentic 机器可读结果](benchmarks/nfcorpus-agentic-summary.json)
 · [Line Search 机器可读结果](benchmarks/nfcorpus-line-search-summary.json)
+· [Passage Gate 机器可读结果](benchmarks/nfcorpus-passage-gate-summary.json)
 
 ![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
@@ -50,13 +57,15 @@ Line Search 的首条命中表现最好（`nDCG@1=0.554180`），但多文档排
 默认：本地文件 → SQLite BM25 ──────────────────→ Jev → MiniMax
 Agentic：本地文件 → MiniMax 规划 → 多路 BM25/RRF → Jev → MiniMax
 混合：本地文件 → BM25 + OpenRouter Embedding/RRF → Jev → MiniMax
+Gate：本地文件 → BM25 + Embedding/RRF → 统一 Jev Gate → MiniMax
 Line：本地文件 → 并行 Jev Choice 窗口 → 全局 Choice → MiniMax
 ```
 
 Jev RAG 默认只用 SQLite FTS5/BM25，不需要 Embedding、向量数据库或 GPU。
 需要更强召回时，可在网页或 CLI 切换到 Agentic 模式，让 MiniMax 规划两轮
 本地关键词搜索，完全不建立向量索引；也可以切换到 BM25 + Embedding + RRF。
-前三种模式复用同一个 Jev 证据重排；Line Search 则让所有索引文段进入
+前三种模式复用同一个 Jev 证据重排；Passage Gate 以一轮四项判断
+取代普通重排；Line Search 则让所有索引文段进入
 Jev 窗口 Choice，再对每个窗口的优胜文段执行第二级全局 Choice。
 
 > 当前状态：Alpha。适合本地试用和二次开发，但 1.0 之前接口与数据库结构可能调整。
@@ -66,6 +75,8 @@ Jev 窗口 Choice，再对每个窗口的优胜文段执行第二级全局 Choic
 - 默认 BM25 + Jev，无向量、无 Embedding、无外部索引服务。
 - 可选两轮 Agentic Search + Jev，无需向量索引即可改善同义词召回。
 - 可选 BM25 + Embedding 倒数排名融合（RRF），再进入 Jev。
+- 可选 Hybrid + 统一 Jev Passage Gate，同时判断相关性、可用证据、
+  事实前提矛盾和提示注入；固定阈值在 NFCorpus 上未提升 nDCG@10。
 - 可选两级 Jev Line Search：每个窗口最多 255 段，结构容量
   `255 × 255 = 65,025` 段，不使用 BM25 或 Embedding；实际费用与耗时会随语料规模增长。
 - 不需要向量数据库或 GPU，混合模式向量缓存于 `.knowledge/`。
@@ -213,6 +224,9 @@ jev-rag search '问题' --no-jev
 
 # 混合召回后使用 Jev 重排。
 jev-rag search '问题' --retrieval-mode hybrid
+
+# 混合召回后使用一轮统一 Jev Passage Gate（实验性）。
+jev-rag search '问题' --retrieval-mode hybrid-gate
 
 # 两轮 Agentic 本地词法检索后使用 Jev，不建立向量索引。
 jev-rag search '问题' --retrieval-mode agentic

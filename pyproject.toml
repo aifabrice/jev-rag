@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jev-rag"
-version = "0.4.0"
-description = "Local knowledge search with BM25, agentic, embedding, and hierarchical Jev retrieval modes."
+version = "0.5.0"
+description = "Local knowledge search with BM25, agentic, embedding, Jev passage gating, and hierarchical retrieval modes."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Jev RAG contributors" }]
-keywords = ["jev", "rag", "vector-free-rag", "bm25", "agentic-search", "line-search", "fts5", "embedding", "retrieval", "reranking", "knowledge-base", "local-search"]
+keywords = ["jev", "rag", "vector-free-rag", "bm25", "agentic-search", "passage-gate", "line-search", "fts5", "embedding", "retrieval", "reranking", "knowledge-base", "local-search"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",

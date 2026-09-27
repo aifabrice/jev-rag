@@ -23,12 +23,13 @@ BM25 top 30 | 0.305654 | 0.512697 | 0.147309
 BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667
 BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474
 Two-level Jev Line Search | 0.366280 | 0.657660 | 0.169397
+Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977
 Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464
 BM25 top 50 + embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977
 Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138
 Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.214907
 
-The evidence supports four limited claims. First, in this recorded run, Jev reranking improved all three reported metrics over the corresponding BM25 shortlist. Second, widening and reformulating lexical recall before reranking improved the vector-free path. Third, the optional hybrid pipeline recorded the best nDCG@10. Fourth, two-level Line Search recorded the best nDCG@1 and MRR@10, but its 0.366280 nDCG@10, 0.234411 Recall@50, $4.553288 cold cost, and 5,168 Jev requests make it an expensive single-best-hit experiment rather than the strongest general retrieval pipeline. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval.
+The evidence supports limited claims. Ordinary Jev reranking improved the corresponding BM25 shortlist; Agentic widening improved the vector-free path; and Hybrid + Jev recorded the best nDCG@10. Two-level Line Search recorded the best nDCG@1 and MRR@10 but was expensive. The unified Passage Gate is a negative result: fixed thresholds excluded 84.4% of candidates and scored 0.376298 nDCG@10, below bare Hybrid at 0.396712 and Hybrid + Jev at 0.444327. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval or that additional gates always improve ranking.
 
 ## Installation summary
 

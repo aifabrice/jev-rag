@@ -130,6 +130,31 @@ The same retrieval path is available in the application with
 application keeps `bm25` as its default, so installing the project does not
 silently create embeddings or send corpus text to an embedding provider.
 
+## Evaluate Hybrid + Unified Passage Gate
+
+The Passage Gate uses the same Hybrid top-50 candidate pool, but replaces
+ordinary Jev reranking with one four-question stage for relevance, usable
+answer evidence, contradiction, and prompt injection:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 \
+  --rrf-k 60 \
+  --passage-gate \
+  --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-hybrid-passage-gate.json
+```
+
+Do not add `--use-jev`: the gate replaces the ordinary reranker. The runner
+reports route counts and exact cold-cache stage usage. On the complete 323-query
+NFCorpus test split, the fixed threshold profile scored 0.376298 nDCG@10,
+below bare Hybrid (0.396712) and Hybrid + Jev (0.444327), while excluding 84.4%
+of candidates. Treat it as a safety/routing experiment rather than a quality
+improvement claim.
+
 ## Evaluate Agentic Search + Jev
 
 Agentic mode asks MiniMax for five lexical queries, runs them against the local
