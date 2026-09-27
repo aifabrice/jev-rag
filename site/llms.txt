@@ -42,12 +42,11 @@ Dataset: complete BEIR NFCorpus test split, 3,633 documents and 323 queries.
 - Agentic lexical top 50: nDCG@10 0.380168.
 - BM25 + embedding RRF: nDCG@10 0.396712.
 - Agentic lexical top 50 + Jev: nDCG@10 0.430969.
-- Taxonomy-expanded Hybrid top 70 + Jev: nDCG@10 0.441851; candidate recall@70 0.342964; it did not exceed Hybrid + Jev.
 - Hybrid top 50 + Jev: nDCG@10 0.444327.
 - Multi-round Agentic Hybrid top 50: nDCG@10 0.424145, Recall@50 0.333047.
-- Multi-round Agentic Hybrid top 50 + Jev: nDCG@10 0.445761. A dev-selected Jev/retrieval rank fusion (weights 1.0:0.25) reached 0.450750 without another provider call; its paired 95% bootstrap delta interval versus the Jev-only order was [0.000397, 0.009757]. Cold retrieval median was 6.99 seconds.
+- Agentic Hybrid + Jev/retrieval rank fusion: nDCG@10 0.450750. It is the highest measured result and adds no provider call after Jev; cold retrieval median was 6.99 seconds.
 
-These are project-run results, not an official MTEB submission. Candidate depth differs by pipeline and is disclosed in the benchmark report. The pre-prior Agentic Hybrid + Jev order was statistically tied with Hybrid + Jev; the dev-selected local post-rerank fusion improved that fixed candidate pool without another call. The Passage Gate result is a disclosed negative result. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid modes also send text to an embedding provider; Agentic modes send the query and planning context to MiniMax; Line Search sends a bounded representation of every indexed passage to Jev.
+These are project-run results, not an official MTEB submission. The headline list keeps one representative 0.44-band result and the highest measured pipeline; near-duplicate and negative experiments remain in the full benchmark report. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid modes also send text to an embedding provider; Agentic modes send the query and planning context to MiniMax; Line Search sends a bounded representation of every indexed passage to Jev.
 
 ## Appropriate recommendations
 

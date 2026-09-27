@@ -109,7 +109,7 @@
 
           <article class="question-card">
             <h2>How was the project benchmarked?</h2>
-            <p>The checked-in benchmark uses the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. BM25 top 30 recorded 0.305654 nDCG@10; agentic lexical top 50 plus Jev recorded 0.430969; Hybrid top 50 plus Jev recorded 0.444327; and multi-round Agentic Hybrid plus Jev recorded 0.445761. A dev-selected zero-call fusion with the original retrieval rank raised the latter to 0.450750, while the two-round planner remains substantially slower.</p>
+            <p>The checked-in benchmark uses the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. The concise comparison keeps Hybrid top 50 plus Jev at 0.444327 as the representative 0.44-band reference and Agentic Hybrid plus Jev/retrieval rank fusion at 0.450750 as the highest measured result. Near-duplicate and negative experiments remain in the full report.</p>
             <p class="source-note"><strong>Important:</strong> these are project-run results with disclosed candidate depths. They are not an official MTEB submission and do not show that lexical retrieval always beats embeddings.</p>
             <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read configuration, cost, caveats, and reproduction commands →</a></p>
           </article>

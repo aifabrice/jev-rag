@@ -27,12 +27,10 @@ Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977
 Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464
 BM25 top 50 + embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977
 Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138
-Taxonomy-expanded Hybrid top 70 + Jev | 0.441851 | 0.654006 | 0.214344
 Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.214907
-Multi-round Agentic Hybrid top 50 + Jev | 0.445761 | 0.645722 | 0.217207
 Agentic Hybrid + Jev/retrieval rank fusion | 0.450750 | 0.652606 | 0.220885
 
-The evidence supports limited claims. Ordinary Jev reranking improved the corresponding BM25 shortlist; Agentic widening improved the vector-free path; and the pre-prior Multi-round Agentic Hybrid + Jev order was statistically tied with ordinary Hybrid + Jev. A dev-selected local RRF between the Jev and original retrieval ranks reached 0.450750 without another provider call; its paired bootstrap delta interval versus the Jev-only order did not cross zero. Two-round planning still raised cold retrieval latency to 6.99 seconds median. Taxonomy routing improved candidate recall but not final nDCG@10. Two-level Line Search recorded the best MRR@10 but was expensive. The unified Passage Gate is a negative result. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval or that additional gates always improve ranking.
+The headline table keeps ordinary Hybrid as the representative 0.44-band reference and the highest measured pipeline. The full benchmark report retains the near-duplicate and negative experiments. A dev-selected local RRF between the Jev and original retrieval ranks reached 0.450750 without another provider call. Two-round planning still raised cold retrieval latency to 6.99 seconds median. Taxonomy routing improved candidate recall but not final nDCG@10. Two-level Line Search recorded the best MRR@10 but was expensive. The unified Passage Gate is a negative result. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval or that additional gates always improve ranking.
 
 ## Installation summary
 

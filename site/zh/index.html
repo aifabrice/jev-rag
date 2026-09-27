@@ -86,13 +86,11 @@
               <tr><td>两级 Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td></tr>
               <tr><td>Hybrid top 50 + 统一 Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td></tr>
               <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
-              <tr><td>分类树扩展 Hybrid top 70 + Jev</td><td>0.441851</td><td>0.654006</td><td>0.214344</td></tr>
               <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td><strong>0.654583</strong></td><td>0.214907</td></tr>
-              <tr><td>多轮 Agentic Hybrid top 50 + Jev</td><td>0.445761</td><td>0.645722</td><td>0.217207</td></tr>
               <tr><td><strong>Agentic Hybrid + Jev/原召回排名融合</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td></tr>
             </tbody>
           </table>
-          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。开发集选定的本地排名融合把 Agentic Hybrid + Jev 从 0.445761 提升到 0.450750，不增加模型调用；但两轮规划仍带来约 6.99 秒的冷跑检索中位延迟。</p>
+          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。主表在 0.44 区间只保留一个代表性方案，以及当前最高分 0.450750；相近分数和负结果仍在完整报告中披露。</p>
           <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">查看完整配置、费用、限制和复现命令 →</a></p>
         </section>
 
