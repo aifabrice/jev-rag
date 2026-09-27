@@ -10,6 +10,8 @@ All notable changes are documented here. The project follows Semantic Versioning
   major version in a comment for Dependabot updates.
 - Add weekly dependency update checks for Python packages and GitHub Actions,
   plus repository-wide CODEOWNERS coverage.
+- Keep secret-scanner failure output aggregate-only so CI logs never echo
+  data derived from a secret-bearing line.
 
 ### Fixed
 
