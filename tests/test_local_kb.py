@@ -12,6 +12,7 @@ from local_kb import (
     DEFAULT_RETRIEVAL_MODE,
     KnowledgeBase,
     LINE_SEARCH_MAX_CHOICES,
+    WEB_APP,
     _parse_agentic_queries,
     _line_search_windows,
     agentic_rank_fusion,
@@ -142,6 +143,20 @@ class PassageTests(unittest.TestCase):
         pattern = checkout_exclude_pattern(root)
         checkout_name = Path(__file__).resolve().parents[1].name
         self.assertEqual(pattern, f"{checkout_name}/**")
+
+
+class WebAppTests(unittest.TestCase):
+    def test_retrieval_snippets_render_markdown(self):
+        self.assertIn('class="snippet rich"', WEB_APP)
+        self.assertIn("renderMarkdown(x.snippet)", WEB_APP)
+
+    def test_streaming_answers_render_markdown(self):
+        self.assertIn("innerHTML=renderMarkdown(answer)", WEB_APP)
+        self.assertIn("classList.add('rich')", WEB_APP)
+
+    def test_markdown_renderer_escapes_input_and_limits_links_to_http(self):
+        self.assertIn("function markdownInline(raw){let s=esc(raw)", WEB_APP)
+        self.assertIn(r"(https?:\/\/[^\s)]+)", WEB_APP)
 
 
 class SearchTests(unittest.TestCase):
