@@ -1,0 +1,104 @@
+{
+  "benchmark": "BEIR NFCorpus",
+  "split": "test",
+  "date": "2026-09-27",
+  "version": "0.7.0",
+  "queries": 323,
+  "documents": 3633,
+  "dataset_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+  "configuration": {
+    "planner_model": "minimax/minimax-m3",
+    "planner_domain_hint": "medical",
+    "planner_rounds": 2,
+    "queries_per_round": 5,
+    "bm25_per_query_k": 100,
+    "embedding_model": "openai/text-embedding-3-large",
+    "vector_top_k": 50,
+    "agentic_weight": 0.65,
+    "vector_weight": 1.0,
+    "rrf_k": 60,
+    "candidate_top_k": 50,
+    "reranker": "typesafe/jev-1.13-20260917",
+    "jev_retrieval_prior_weight": 0.25,
+    "post_rerank_rrf_k": 60,
+    "weight_selection_split": "dev",
+    "test_weight_tuning": false
+  },
+  "retrieval": {
+    "ndcg_at_10": 0.424145,
+    "mrr_at_10": 0.637722,
+    "map_at_10": 0.321039,
+    "recall_at_10": 0.206303,
+    "recall_at_50": 0.333047
+  },
+  "agentic_hybrid_plus_jev": {
+    "ndcg_at_1": 0.556244,
+    "ndcg_at_10": 0.445761,
+    "mrr_at_10": 0.645722,
+    "map_at_10": 0.341929,
+    "recall_at_10": 0.217207,
+    "recall_at_50": 0.333047
+  },
+  "agentic_hybrid_plus_jev_retrieval_prior": {
+    "dev_ndcg_at_10": 0.412509,
+    "test_ndcg_at_1": 0.561404,
+    "test_ndcg_at_10": 0.45075,
+    "test_mrr_at_10": 0.652606,
+    "test_map_at_10": 0.345403,
+    "test_recall_at_10": 0.220885,
+    "test_recall_at_50": 0.333047,
+    "jev_rank_weight": 1.0,
+    "retrieval_rank_weight": 0.25,
+    "extra_provider_calls": 0
+  },
+  "comparison_to_jev_only_order": {
+    "baseline_ndcg_at_10": 0.445761,
+    "absolute_delta": 0.004989,
+    "relative_delta_percent": 1.119183,
+    "queries_improved": 100,
+    "queries_tied": 158,
+    "queries_degraded": 65,
+    "paired_bootstrap_samples": 20000,
+    "paired_bootstrap_95_percent_interval": [0.000397, 0.009757],
+    "statistically_significant_at_95_percent": true
+  },
+  "comparison_to_hybrid_jev": {
+    "baseline_ndcg_at_10": 0.444327,
+    "absolute_delta": 0.001434,
+    "relative_delta_percent": 0.322754,
+    "queries_improved": 97,
+    "queries_tied": 142,
+    "queries_degraded": 84,
+    "paired_bootstrap_samples": 20000,
+    "paired_bootstrap_95_percent_interval": [-0.006883, 0.009834],
+    "statistically_significant_at_95_percent": false
+  },
+  "cold_retrieval_latency_ms": {
+    "median": 6990.67,
+    "p95": 24391.42
+  },
+  "usage": {
+    "planner_prompt_tokens": 437433,
+    "planner_completion_tokens": 50241,
+    "planner_cost_usd": 0.16607392362,
+    "jev_input_tokens": 8833108,
+    "jev_output_tokens": 369835,
+    "jev_cost_usd": 0.370990536,
+    "combined_planner_and_jev_cost_usd": 0.53706445962,
+    "corpus_embedding_cost_excluded_as_cached_one_time_cost": true
+  },
+  "single_batch_50_pilot": {
+    "split": "dev",
+    "queries": 10,
+    "candidate_max_chars": 600,
+    "one_batch_ndcg_at_10": 0.373795,
+    "five_batches_ndcg_at_10": 0.367176,
+    "one_batch_median_jev_ms": 1536,
+    "five_batches_median_jev_ms": 2315,
+    "one_batch_cost_usd": 0.006567582,
+    "five_batches_cost_usd": 0.00709191,
+    "status": "pilot_only_not_a_full_benchmark"
+  },
+  "conclusion": "Dev-selected post-rerank fusion reached 0.450750 test nDCG@10 without another provider call. The underlying two-round Agentic retrieval remains substantially slower than ordinary Hybrid.",
+  "caveat": "Unofficial multi-stage pipeline result; not an MTEB submission. Relevance judgments were used only for post-ranking metrics. The 50-candidate single-batch comparison is a ten-query pilot, not a full benchmark."
+}

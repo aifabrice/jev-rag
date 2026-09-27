@@ -36,9 +36,21 @@ from typing import Any, Iterable
 from xml.etree import ElementTree
 
 from jev_test import load_dotenv, request_decision
+from taxonomy import (
+    DEFAULT_LEAF_SIZE,
+    DEFAULT_ROUTE_LEAVES,
+    DEFAULT_ROUTE_MIN_ITEMS,
+    DEFAULT_TAXONOMY_EXTRA_CANDIDATES,
+    DEFAULT_TOP_BRANCHES,
+    build_taxonomy,
+    load_taxonomy,
+    route_taxonomy,
+    save_taxonomy,
+    taxonomy_candidate_expansion,
+)
 
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.7.0"
 DEFAULT_GENERATOR_MODEL = "minimax/minimax-m3"
 DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
 DEFAULT_RETRIEVAL_MODE = "bm25"
@@ -54,6 +66,9 @@ DEFAULT_AGENTIC_TOP_K = 50
 DEFAULT_AGENTIC_PER_QUERY_K = 100
 DEFAULT_AGENTIC_ROUNDS = 2
 DEFAULT_AGENTIC_QUERIES = 5
+DEFAULT_AGENTIC_HYBRID_AGENTIC_WEIGHT = 0.65
+DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT = 1.0
+DEFAULT_AGENTIC_HYBRID_JEV_RETRIEVAL_PRIOR_WEIGHT = 0.25
 LINE_SEARCH_MAX_CHOICES = 255
 DEFAULT_LINE_SEARCH_WINDOW_SIZE = 255
 DEFAULT_LINE_SEARCH_BEAM = 4
@@ -451,6 +466,7 @@ class KnowledgeBase:
                 lexical_ms REAL,
                 embedding_ms REAL,
                 agentic_ms REAL,
+                taxonomy_ms REAL,
                 line_search_ms REAL,
                 jev_ms REAL,
                 first_token_ms REAL,
@@ -481,6 +497,8 @@ class KnowledgeBase:
             self.connection.execute("ALTER TABLE answer_runs ADD COLUMN agentic_model TEXT")
         if "agentic_ms" not in columns:
             self.connection.execute("ALTER TABLE answer_runs ADD COLUMN agentic_ms REAL")
+        if "taxonomy_ms" not in columns:
+            self.connection.execute("ALTER TABLE answer_runs ADD COLUMN taxonomy_ms REAL")
         if "line_search_ms" not in columns:
             self.connection.execute("ALTER TABLE answer_runs ADD COLUMN line_search_ms REAL")
         self.connection.commit()
@@ -610,19 +628,29 @@ class KnowledgeBase:
             "last_indexed_at": self._setting("last_indexed_at"),
         }
 
-    def lexical_search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    def lexical_search(
+        self,
+        query: str,
+        limit: int = 20,
+        allowed_rowids: set[int] | None = None,
+    ) -> list[dict[str, Any]]:
         match = fts_query(query)
-        rows = self.connection.execute(
-            """
+        sql = """
             SELECT rowid, doc_id, passage_no, path, title, heading, start_line, end_line, body,
                    bm25(passages, 0,0,0,0,0,0,0,0,5.0,1.0) AS rank
             FROM passages
             WHERE passages MATCH ?
-            ORDER BY rank ASC
-            LIMIT ?
-            """,
-            (match, max(1, min(limit, 100))),
-        ).fetchall()
+        """
+        parameters: list[Any] = [match]
+        if allowed_rowids is not None:
+            if not allowed_rowids:
+                return []
+            ordered_rowids = sorted(int(rowid) for rowid in allowed_rowids)
+            sql += f" AND rowid IN ({','.join('?' for _ in ordered_rowids)})"
+            parameters.extend(ordered_rowids)
+        sql += " ORDER BY rank ASC LIMIT ?"
+        parameters.append(max(1, min(limit, 100)))
+        rows = self.connection.execute(sql, parameters).fetchall()
         results: list[dict[str, Any]] = []
         for position, row in enumerate(rows, start=1):
             item = dict(row)
@@ -671,16 +699,17 @@ class KnowledgeBase:
             """
             INSERT INTO answer_runs(
                 query,generator_model,retrieval_mode,embedding_model,agentic_model,use_jev,
-                candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,line_search_ms,jev_ms,
+                candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,taxonomy_ms,line_search_ms,jev_ms,
                 first_token_ms,generation_ms,total_ms,
                 prompt_tokens,completion_tokens,cost,answer,sources_json,created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 run["query"], run["generator_model"], run.get("retrieval_mode", "bm25"),
                 run.get("embedding_model"), run.get("agentic_model"), int(run["use_jev"]),
                 run["candidate_count"], run["returned_count"], run.get("lexical_ms"),
-                run.get("embedding_ms"), run.get("agentic_ms"), run.get("line_search_ms"),
+                run.get("embedding_ms"), run.get("agentic_ms"), run.get("taxonomy_ms"),
+                run.get("line_search_ms"),
                 run.get("jev_ms"),
                 run.get("first_token_ms"),
                 run.get("generation_ms"),
@@ -696,7 +725,7 @@ class KnowledgeBase:
         rows = self.connection.execute(
             """
             SELECT id,query,generator_model,retrieval_mode,embedding_model,agentic_model,use_jev,
-                   candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,line_search_ms,jev_ms,
+                   candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,taxonomy_ms,line_search_ms,jev_ms,
                    first_token_ms,generation_ms,total_ms,
                    prompt_tokens,completion_tokens,cost,created_at
             FROM answer_runs ORDER BY id DESC LIMIT ?
@@ -819,27 +848,24 @@ def request_agentic_queries(
             "observations": observations,
             "max_queries": max_queries,
         }
-    body = json.dumps(
-        {
-            "model": model,
-            "temperature": 0,
-            "max_tokens": 600,
-            "reasoning": {"effort": "none", "exclude": True},
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        f"{task} Return JSON only in this schema: "
-                        '{"queries":["query one","query two"]}. '
-                        "Never include more queries than requested."
-                    ),
-                },
-                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
-            ],
-        },
-        ensure_ascii=False,
-    ).encode("utf-8")
+    request_payload = {
+        "model": model,
+        "temperature": 0,
+        "max_tokens": 600,
+        "reasoning": {"effort": "none", "exclude": True},
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    f"{task} Return JSON only in this schema: "
+                    '{"queries":["query one","query two"]}. '
+                    "Never include more queries than requested."
+                ),
+            },
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+        ],
+    }
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -849,12 +875,46 @@ def request_agentic_queries(
     }
     started = time.perf_counter()
     payload: dict[str, Any] = {}
+    total_usage: dict[str, float] = {}
+    last_content_error: RuntimeError | None = None
     for attempt in range(retries + 1):
+        attempt_payload = dict(request_payload)
+        if attempt:
+            # Some providers occasionally collapse a valid json_object request
+            # to `{}`. Retry in plain-text mode while retaining the strict JSON
+            # instruction and the same deterministic temperature.
+            attempt_payload.pop("response_format", None)
+            attempt_payload["max_tokens"] = 600 * (attempt + 1)
+        body = json.dumps(attempt_payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(OPENROUTER_CHAT_URL, body, headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-            break
+            _add_numeric_usage(total_usage, payload.get("usage") or {})
+            choices = payload.get("choices") or []
+            message = choices[0].get("message", {}) if choices else {}
+            content = message.get("content") or ""
+            if not content:
+                last_content_error = RuntimeError(
+                    "Agentic 规划模型返回空内容"
+                    f"（finish_reason={choices[0].get('finish_reason') if choices else None}）"
+                )
+            else:
+                try:
+                    queries = _parse_agentic_queries(content, max_queries)
+                except RuntimeError as exc:
+                    last_content_error = exc
+                else:
+                    return queries, {
+                        "model": payload.get("model", model),
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                        "usage": total_usage,
+                        "attempts": attempt + 1,
+                    }
+            if attempt < retries:
+                time.sleep(0.3 * (2**attempt))
+                continue
+            raise last_content_error
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:2000]
             retryable = exc.code in {408, 425, 429, 500, 502, 503, 504, 520, 522, 524, 529}
@@ -867,20 +927,7 @@ def request_agentic_queries(
                 time.sleep(0.5 * (2**attempt))
                 continue
             raise RuntimeError(f"Agentic 规划网络请求失败：{exc}") from exc
-    choices = payload.get("choices") or []
-    message = choices[0].get("message", {}) if choices else {}
-    content = message.get("content") or ""
-    if not content:
-        raise RuntimeError(
-            "Agentic 规划模型返回空内容"
-            f"（finish_reason={choices[0].get('finish_reason') if choices else None}）"
-        )
-    queries = _parse_agentic_queries(content, max_queries)
-    return queries, {
-        "model": payload.get("model", model),
-        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
-        "usage": payload.get("usage") or {},
-    }
+    raise last_content_error or RuntimeError("Agentic 规划请求失败")
 
 
 def request_embeddings(
@@ -1028,6 +1075,77 @@ def load_or_create_embedding_index(
     return rowids, vectors, meta, passages
 
 
+def load_or_create_taxonomy_index(
+    kb: KnowledgeBase,
+    embedding_model: str,
+    rowids: Any,
+    vectors: Any,
+    passages: list[dict[str, Any]],
+    *,
+    top_branches: int = DEFAULT_TOP_BRANCHES,
+    leaf_size: int = DEFAULT_LEAF_SIZE,
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+    """Load or deterministically build a corpus-only hierarchical taxonomy."""
+    started = time.perf_counter()
+    fingerprint = _passage_fingerprint(embedding_model, passages)
+    config_identity = sha256_text(
+        json.dumps([top_branches, leaf_size, fingerprint, embedding_model])
+    )[:16]
+    prefix = (
+        kb.db_path.parent
+        / "taxonomy"
+        / f"{kb.db_path.stem}-{config_identity}"
+    )
+    cached = load_taxonomy(prefix)
+    if cached:
+        tree, centroids = cached
+        if set(tree.get("assignments") or {}) == {str(int(rowid)) for rowid in rowids}:
+            return tree, centroids, {
+                "cache_hit": True,
+                "path": str(prefix.with_suffix(".json")),
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                "top_node_count": tree["top_node_count"],
+                "leaf_node_count": tree["leaf_node_count"],
+                "item_count": tree["item_count"],
+            }
+
+    texts = [
+        "\n".join(
+            part
+            for part in (
+                str(item.get("title") or ""),
+                str(item.get("heading") or ""),
+                str(item.get("body") or "")[:2400],
+            )
+            if part.strip()
+        )
+        for item in passages
+    ]
+    tree, centroids = build_taxonomy(
+        vectors,
+        [str(int(rowid)) for rowid in rowids],
+        texts,
+        top_branches=top_branches,
+        leaf_size=leaf_size,
+    )
+    tree.update(
+        {
+            "embedding_model": embedding_model,
+            "corpus_fingerprint": fingerprint,
+            "documents_root": str(kb.documents_root),
+        }
+    )
+    save_taxonomy(prefix, tree, centroids)
+    return tree, centroids, {
+        "cache_hit": False,
+        "path": str(prefix.with_suffix(".json")),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        "top_node_count": tree["top_node_count"],
+        "leaf_node_count": tree["leaf_node_count"],
+        "item_count": tree["item_count"],
+    }
+
+
 def reciprocal_rank_fusion(
     bm25_results: list[dict[str, Any]],
     vector_results: list[dict[str, Any]],
@@ -1092,6 +1210,49 @@ def agentic_rank_fusion(
         item["retrieval_rank"] = rank
         results.append(item)
     return results
+
+
+def agentic_vector_rank_fusion(
+    agentic_results: list[dict[str, Any]],
+    vector_results: list[dict[str, Any]],
+    limit: int = DEFAULT_HYBRID_TOP_K,
+    rrf_k: int = DEFAULT_RRF_K,
+    agentic_weight: float = DEFAULT_AGENTIC_HYBRID_AGENTIC_WEIGHT,
+    vector_weight: float = DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT,
+) -> list[dict[str, Any]]:
+    """Fuse iterative lexical evidence with dense retrieval before Jev.
+
+    Agentic retrieval already fuses the original query and all planned BM25
+    searches. Treating that ranking and the dense ranking as two independent
+    sources avoids counting the original BM25 run twice.
+    """
+    if agentic_weight <= 0 or vector_weight <= 0:
+        raise ValueError("Agentic Hybrid 融合权重必须大于 0")
+    items: dict[int, dict[str, Any]] = {}
+    scores: dict[int, float] = {}
+    for source, rank_key, weight in (
+        (agentic_results, "agentic_rank", agentic_weight),
+        (vector_results, "vector_rank", vector_weight),
+    ):
+        for rank, candidate in enumerate(source, start=1):
+            rowid = int(candidate["rowid"])
+            merged = items.setdefault(rowid, dict(candidate))
+            merged.update(candidate)
+            merged[rank_key] = rank
+            scores[rowid] = scores.get(rowid, 0.0) + weight / (rrf_k + rank)
+    ordered = sorted(
+        items.values(),
+        key=lambda item: (
+            -scores[int(item["rowid"])],
+            item.get("agentic_rank", 10**9),
+            item.get("vector_rank", 10**9),
+            int(item["rowid"]),
+        ),
+    )[: max(1, limit)]
+    for rank, item in enumerate(ordered, start=1):
+        item["retrieval_rank"] = rank
+        item["agentic_hybrid_rrf_score"] = round(scores[int(item["rowid"])], 8)
+    return ordered
 
 
 def _agentic_observations(
@@ -1237,6 +1398,7 @@ def agentic_retrieve(
         "lexical_ms": round(lexical_ms, 1),
         "embedding_ms": 0.0,
         "agentic_ms": round((time.perf_counter() - started) * 1000, 1),
+        "taxonomy_ms": 0.0,
         "line_search_ms": 0.0,
         "embedding": None,
         "line_search": None,
@@ -1578,17 +1740,27 @@ def retrieve_candidates(
     agentic_per_query_k: int = DEFAULT_AGENTIC_PER_QUERY_K,
     agentic_top_k: int = DEFAULT_AGENTIC_TOP_K,
     agentic_domain_hint: str | None = None,
+    agentic_hybrid_agentic_weight: float = DEFAULT_AGENTIC_HYBRID_AGENTIC_WEIGHT,
+    agentic_hybrid_vector_weight: float = DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT,
     line_search_window_size: int = DEFAULT_LINE_SEARCH_WINDOW_SIZE,
     line_search_beam: int = DEFAULT_LINE_SEARCH_BEAM,
     line_search_top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
+    taxonomy_top_branches: int = DEFAULT_TOP_BRANCHES,
+    taxonomy_leaf_size: int = DEFAULT_LEAF_SIZE,
+    taxonomy_route_leaves: int = DEFAULT_ROUTE_LEAVES,
+    taxonomy_min_items: int = DEFAULT_ROUTE_MIN_ITEMS,
+    taxonomy_extra_candidates: int = DEFAULT_TAXONOMY_EXTRA_CANDIDATES,
     provider: str = "openrouter",
     rrf_k: int = DEFAULT_RRF_K,
     timeout: float = 60.0,
     use_cache: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if retrieval_mode not in {"bm25", "hybrid", "hybrid-gate", "agentic", "line-search"}:
+    if retrieval_mode not in {
+        "bm25", "hybrid", "agentic-hybrid", "hybrid-gate", "taxonomy", "agentic", "line-search"
+    }:
         raise ValueError(
-            "retrieval_mode 必须是 bm25、hybrid、hybrid-gate、agentic 或 line-search"
+            "retrieval_mode 必须是 bm25、hybrid、agentic-hybrid、hybrid-gate、"
+            "taxonomy、agentic 或 line-search"
         )
 
     if retrieval_mode == "line-search":
@@ -1607,6 +1779,7 @@ def retrieve_candidates(
             "lexical_ms": 0.0,
             "embedding_ms": 0.0,
             "agentic_ms": 0.0,
+            "taxonomy_ms": 0.0,
             "line_search_ms": line_meta["elapsed_ms"],
             "embedding": None,
             "agentic": None,
@@ -1628,8 +1801,91 @@ def retrieve_candidates(
             domain_hint=agentic_domain_hint,
         )
 
+    if retrieval_mode == "agentic-hybrid":
+        index_started = time.perf_counter()
+        rowids, corpus_vectors, index_meta, passages = load_or_create_embedding_index(
+            kb, embedding_model, timeout
+        )
+        index_ms = (time.perf_counter() - index_started) * 1000
+        by_rowid = {int(item["rowid"]): item for item in passages}
+        query_usage: dict[str, float] = {}
+        vector_results: list[dict[str, Any]] = []
+
+        def timed_query_embedding() -> tuple[list[list[float]], dict[str, float], float]:
+            started = time.perf_counter()
+            vectors, usage = request_embeddings([query], embedding_model, timeout)
+            return vectors, usage, (time.perf_counter() - started) * 1000
+
+        # Corpus indexing is a one-time prerequisite. Per-query embedding then
+        # runs concurrently with both rounds of Agentic lexical planning.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            embedding_future = executor.submit(timed_query_embedding)
+            agentic_results, agentic_meta = agentic_retrieve(
+                kb,
+                query,
+                model=agentic_model,
+                rounds=agentic_rounds,
+                queries_per_round=agentic_queries,
+                per_query_k=agentic_per_query_k,
+                top_k=agentic_top_k,
+                rrf_k=rrf_k,
+                timeout=timeout,
+                use_cache=use_cache,
+                domain_hint=agentic_domain_hint,
+            )
+            query_vectors, query_usage, query_embedding_ms = embedding_future.result()
+
+        vector_scoring_started = time.perf_counter()
+        if len(rowids):
+            np = _numpy()
+            query_vector = np.asarray(query_vectors[0], dtype=np.float32)
+            query_vector /= max(float(np.linalg.norm(query_vector)), 1e-12)
+            scores = corpus_vectors @ query_vector
+            positions = np.argsort(-scores, kind="stable")[:
+                max(1, min(vector_top_k, len(rowids)))
+            ]
+            for vector_rank, position in enumerate(positions.tolist(), start=1):
+                item = dict(by_rowid[int(rowids[position])])
+                item["vector_rank"] = vector_rank
+                item["vector_score"] = round(float(scores[position]), 6)
+                item["snippet"] = make_snippet(item["body"], query)
+                vector_results.append(item)
+        vector_scoring_ms = (time.perf_counter() - vector_scoring_started) * 1000
+
+        candidates = agentic_vector_rank_fusion(
+            agentic_results,
+            vector_results,
+            limit=hybrid_top_k,
+            rrf_k=rrf_k,
+            agentic_weight=agentic_hybrid_agentic_weight,
+            vector_weight=agentic_hybrid_vector_weight,
+        )
+        embedding_usage = dict(index_meta.get("usage") or {})
+        _add_numeric_usage(embedding_usage, query_usage)
+        return candidates, {
+            "mode": "agentic-hybrid",
+            "lexical_ms": agentic_meta.get("lexical_ms", 0.0),
+            "embedding_ms": round(index_ms + query_embedding_ms + vector_scoring_ms, 1),
+            "agentic_ms": agentic_meta.get("agentic_ms", 0.0),
+            "taxonomy_ms": 0.0,
+            "line_search_ms": 0.0,
+            "embedding": {**index_meta, "usage": embedding_usage},
+            "agentic": agentic_meta.get("agentic"),
+            "taxonomy": None,
+            "line_search": None,
+            "agentic_candidates": len(agentic_results),
+            "vector_candidates": len(vector_results),
+            "rrf_k": rrf_k,
+            "agentic_weight": agentic_hybrid_agentic_weight,
+            "vector_weight": agentic_hybrid_vector_weight,
+        }
+
     lexical_started = time.perf_counter()
-    bm25_limit = hybrid_top_k if retrieval_mode in {"hybrid", "hybrid-gate"} else top_k
+    bm25_limit = (
+        hybrid_top_k
+        if retrieval_mode in {"hybrid", "hybrid-gate", "taxonomy"}
+        else top_k
+    )
     bm25_results = kb.lexical_search(query, bm25_limit)
     lexical_ms = round((time.perf_counter() - lexical_started) * 1000, 1)
     if retrieval_mode == "bm25":
@@ -1640,6 +1896,7 @@ def retrieve_candidates(
             "lexical_ms": lexical_ms,
             "embedding_ms": 0.0,
             "agentic_ms": 0.0,
+            "taxonomy_ms": 0.0,
             "line_search_ms": 0.0,
             "embedding": None,
             "agentic": None,
@@ -1652,6 +1909,20 @@ def retrieve_candidates(
     )
     vector_results: list[dict[str, Any]] = []
     query_usage: dict[str, float] = {}
+    query_vector = None
+    scores = None
+    by_rowid = {int(item["rowid"]): item for item in passages}
+
+    def vector_items(positions: Any) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for vector_rank, position in enumerate(positions.tolist(), start=1):
+            item = dict(by_rowid[int(rowids[position])])
+            item["vector_rank"] = vector_rank
+            item["vector_score"] = round(float(scores[position]), 6)
+            item["snippet"] = make_snippet(item["body"], query)
+            results.append(item)
+        return results
+
     if len(rowids):
         np = _numpy()
         query_vectors, query_usage = request_embeddings([query], embedding_model, timeout)
@@ -1659,17 +1930,67 @@ def retrieve_candidates(
         query_vector /= max(float(np.linalg.norm(query_vector)), 1e-12)
         scores = corpus_vectors @ query_vector
         positions = np.argsort(-scores, kind="stable")[: max(1, min(vector_top_k, len(rowids)))]
-        by_rowid = {int(item["rowid"]): item for item in passages}
-        for vector_rank, position in enumerate(positions.tolist(), start=1):
-            item = dict(by_rowid[int(rowids[position])])
-            item["vector_rank"] = vector_rank
-            item["vector_score"] = round(float(scores[position]), 6)
-            item["snippet"] = make_snippet(item["body"], query)
-            vector_results.append(item)
+        vector_results = vector_items(positions)
 
     candidates = reciprocal_rank_fusion(
         bm25_results, vector_results, max(1, hybrid_top_k), rrf_k
     )
+    taxonomy_meta = None
+    taxonomy_ms = 0.0
+    if retrieval_mode == "taxonomy" and query_vector is not None and scores is not None:
+        taxonomy_started = time.perf_counter()
+        tree, leaf_centroids, tree_meta = load_or_create_taxonomy_index(
+            kb,
+            embedding_model,
+            rowids,
+            corpus_vectors,
+            passages,
+            top_branches=taxonomy_top_branches,
+            leaf_size=taxonomy_leaf_size,
+        )
+        allowed_ids, route_meta = route_taxonomy(
+            query_vector,
+            tree,
+            leaf_centroids,
+            route_leaves=taxonomy_route_leaves,
+            min_items=taxonomy_min_items,
+        )
+        allowed_rowids = {int(identity) for identity in allowed_ids}
+        routed_bm25 = kb.lexical_search(query, hybrid_top_k, allowed_rowids)
+        np = _numpy()
+        allowed_positions = np.asarray(
+            [index for index, rowid in enumerate(rowids.tolist()) if int(rowid) in allowed_rowids],
+            dtype=np.int64,
+        )
+        if len(allowed_positions):
+            routed_positions = allowed_positions[
+                np.argsort(-scores[allowed_positions], kind="stable")[:vector_top_k]
+            ]
+            routed_vectors = vector_items(routed_positions)
+        else:
+            routed_vectors = []
+        routed_candidates = reciprocal_rank_fusion(
+            routed_bm25, routed_vectors, max(1, hybrid_top_k), rrf_k
+        )
+        candidates = taxonomy_candidate_expansion(
+            routed_candidates,
+            candidates,
+            extra_candidates=taxonomy_extra_candidates,
+        )
+        labels = tree.get("labels") or {}
+        for item in candidates:
+            memberships = tree["assignments"].get(str(int(item["rowid"])), [])
+            item["taxonomy_nodes"] = [labels.get(node_id, node_id) for node_id in memberships]
+            item["taxonomy_routed"] = int(item["rowid"]) in allowed_rowids
+        taxonomy_ms = round((time.perf_counter() - taxonomy_started) * 1000, 1)
+        taxonomy_meta = {
+            **tree_meta,
+            **route_meta,
+            "extra_candidates": taxonomy_extra_candidates,
+            "routed_bm25_candidates": len(routed_bm25),
+            "routed_vector_candidates": len(routed_vectors),
+            "routed_fused_candidates": len(routed_candidates),
+        }
     usage = dict(index_meta.get("usage") or {})
     for key, value in query_usage.items():
         usage[key] = usage.get(key, 0.0) + value
@@ -1679,11 +2000,13 @@ def retrieve_candidates(
         "lexical_ms": lexical_ms,
         "embedding_ms": embedding_ms,
         "agentic_ms": 0.0,
+        "taxonomy_ms": taxonomy_ms,
         "line_search_ms": 0.0,
         "bm25_candidates": len(bm25_results),
         "vector_candidates": len(vector_results),
         "embedding": {**index_meta, "usage": usage},
         "agentic": None,
+        "taxonomy": taxonomy_meta,
         "line_search": None,
         "rrf_k": rrf_k,
     }
@@ -1696,18 +2019,73 @@ def jev_rerank(
     provider: str = "openrouter",
     timeout: float = 60.0,
     use_cache: bool = True,
+    batch_size: int = JEV_BATCH_SIZE,
+    candidate_max_chars: int = 1800,
+    retrieval_prior_weight: float = 0.0,
+    rank_fusion_k: int = DEFAULT_RRF_K,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not candidates:
         return [], {"used": False, "reason": "no_candidates"}
+    if not 1 <= batch_size <= 100:
+        raise ValueError("Jev batch_size 必须在 1 到 100 之间")
+    if not 200 <= candidate_max_chars <= 3600:
+        raise ValueError("Jev candidate_max_chars 必须在 200 到 3600 之间")
+    if retrieval_prior_weight < 0:
+        raise ValueError("Jev retrieval_prior_weight 不能为负数")
+    if rank_fusion_k < 1:
+        raise ValueError("Jev rank_fusion_k 必须为正数")
+
+    def apply_retrieval_prior(
+        ranked: list[dict[str, Any]], meta: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        output = [dict(item) for item in ranked]
+        if retrieval_prior_weight > 0:
+            for jev_rank, item in enumerate(output, start=1):
+                retrieval_rank = int(item.get("retrieval_rank", jev_rank))
+                item["jev_rank"] = jev_rank
+                item["jev_retrieval_rrf_score"] = round(
+                    1.0 / (rank_fusion_k + jev_rank)
+                    + retrieval_prior_weight / (rank_fusion_k + retrieval_rank),
+                    10,
+                )
+            output.sort(
+                key=lambda item: (
+                    -item["jev_retrieval_rrf_score"],
+                    item["jev_rank"],
+                    item.get("retrieval_rank", 10**9),
+                )
+            )
+        for position, item in enumerate(output, start=1):
+            item["final_rank"] = position
+        return output, {
+            **meta,
+            "retrieval_prior_weight": retrieval_prior_weight,
+            "rank_fusion_k": rank_fusion_k,
+            "retrieval_prior_applied": retrieval_prior_weight > 0,
+        }
 
     identity = [f"{c['rowid']}:{sha256_text(c['body'])[:12]}" for c in candidates]
-    cache_key = sha256_text(
-        json.dumps(["jev-batched-v1", provider, query, identity], ensure_ascii=False)
-    )
+    # Keep the original default cache key stable. Experimental batch/content
+    # settings need their own key, but should not invalidate existing default
+    # rerank results for users upgrading from an earlier release.
+    if batch_size == JEV_BATCH_SIZE and candidate_max_chars == 1800:
+        cache_identity: list[Any] = ["jev-batched-v1", provider, query, identity]
+    else:
+        cache_identity = [
+            "jev-batched-v2",
+            provider,
+            query,
+            batch_size,
+            candidate_max_chars,
+            identity,
+        ]
+    cache_key = sha256_text(json.dumps(cache_identity, ensure_ascii=False))
     if use_cache:
         cached = kb.cache_get(cache_key)
         if cached:
-            return cached["results"], {**cached["meta"], "cache_hit": True}
+            return apply_retrieval_prior(
+                cached["results"], {**cached["meta"], "cache_hit": True}
+            )
 
     prepared: list[tuple[int, dict[str, Any]]] = []
     for index, candidate in enumerate(candidates):
@@ -1719,11 +2097,13 @@ def jev_rerank(
                 "title": candidate["title"],
                 "heading": candidate["heading"],
                 "source": candidate["path"],
-                "text": make_snippet(candidate["body"], query, max_chars=1800),
+                "text": make_snippet(
+                    candidate["body"], query, max_chars=candidate_max_chars
+                ),
             })
         )
 
-    batches = [prepared[i : i + JEV_BATCH_SIZE] for i in range(0, len(prepared), JEV_BATCH_SIZE)]
+    batches = [prepared[i : i + batch_size] for i in range(0, len(prepared), batch_size)]
 
     def score_batch(batch: list[tuple[int, dict[str, Any]]]) -> tuple[dict[str, Any], dict[int, float]]:
         questions: dict[str, Any] = {}
@@ -1759,7 +2139,9 @@ def jev_rerank(
         return response, scores
 
     rerank_started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=min(4, len(batches))) as executor:
+    # Jev accepts independent batches. Run one worker per batch (bounded) so a
+    # 70-candidate taxonomy pool does not wait for a second serial wave.
+    with ThreadPoolExecutor(max_workers=min(8, len(batches))) as executor:
         batch_results = list(executor.map(score_batch, batches))
     elapsed_ms = round((time.perf_counter() - rerank_started) * 1000)
     scores = {index: score for _, batch_scores in batch_results for index, score in batch_scores.items()}
@@ -1798,12 +2180,13 @@ def jev_rerank(
         "elapsed_ms": elapsed_ms,
         "has_answer": has_answer,
         "batch_count": len(batches),
-        "batch_size": JEV_BATCH_SIZE,
+        "batch_size": batch_size,
+        "candidate_max_chars": candidate_max_chars,
         "usage": usage,
     }
     if use_cache:
         kb.cache_put(cache_key, {"results": results, "meta": meta})
-    return results, meta
+    return apply_retrieval_prior(results, meta)
 
 
 def jev_passage_gate(
@@ -2025,6 +2408,7 @@ def run_search(
     line_search_beam: int = DEFAULT_LINE_SEARCH_BEAM,
     line_search_top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
     rrf_k: int = DEFAULT_RRF_K,
+    jev_retrieval_prior_weight: float | None = None,
 ) -> dict[str, Any]:
     if retrieval_mode in {"line-search", "hybrid-gate"} and not use_jev:
         raise ValueError(f"{retrieval_mode} 模式本身依赖 Jev，不能与 --no-jev 一起使用")
@@ -2073,7 +2457,22 @@ def run_search(
         )
         ranked = [item for item in gated if item.get("gate_route") != "exclude"]
     elif use_jev:
-        ranked, jev_meta = jev_rerank(kb, query, candidates, provider, timeout, use_cache)
+        prior_weight = (
+            DEFAULT_AGENTIC_HYBRID_JEV_RETRIEVAL_PRIOR_WEIGHT
+            if jev_retrieval_prior_weight is None
+            and retrieval_mode == "agentic-hybrid"
+            else float(jev_retrieval_prior_weight or 0.0)
+        )
+        ranked, jev_meta = jev_rerank(
+            kb,
+            query,
+            candidates,
+            provider,
+            timeout,
+            use_cache,
+            retrieval_prior_weight=prior_weight,
+            rank_fusion_k=rrf_k,
+        )
         if threshold > 0:
             ranked = [item for item in ranked if item.get("jev_score", 0) >= threshold]
     else:
@@ -2090,6 +2489,7 @@ def run_search(
             "lexical_ms": retrieval_meta["lexical_ms"],
             "embedding_ms": retrieval_meta["embedding_ms"],
             "agentic_ms": retrieval_meta["agentic_ms"],
+            "taxonomy_ms": retrieval_meta.get("taxonomy_ms", 0.0),
             "line_search_ms": retrieval_meta["line_search_ms"],
             "total_ms": round((time.perf_counter() - started) * 1000, 1),
         },
@@ -2288,9 +2688,9 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 .summary{color:var(--muted);font-size:13px}.source{padding:13px 0;border-top:1px solid var(--line)}.source:first-child{border-top:0}.source h3{font-size:15px;margin:0 0 3px}.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:12px}.score{color:var(--accent);font-weight:650}.snippet{white-space:pre-wrap;margin:8px 0 0;color:#36423d;max-height:130px;overflow:hidden}.empty{padding:42px 0;text-align:center;color:var(--muted)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.error{color:#9d2b24}
 @media(max-width:700px){main{padding:28px 16px}.search{grid-template-columns:1fr}.search button{height:48px}header{display:block}#status{text-align:left;margin-top:12px}.metrics{grid-template-columns:repeat(2,1fr)}}
 </style></head><body><main>
-<header><div><h1>Jev RAG</h1><p>默认 BM25 + Jev，可切换 Agentic、Embedding 混合召回、Passage Gate 或两级 Line Search。</p></div><div id="status">读取索引…</div></header>
+<header><div><h1>Jev RAG</h1><p>默认 BM25 + Jev，可切换多轮 Agentic、Embedding 混合召回、并行 Agentic Hybrid、知识分类树、Passage Gate 或两级 Line Search。</p></div><div id="status">读取索引…</div></header>
 <form id="form" class="search"><input id="q" autocomplete="off" placeholder="输入一个需要从本地文档回答的问题"><button id="go">提问</button></form>
-<div class="options"><label>检索模式 <select id="mode"><option value="bm25">BM25 + Jev（默认）</option><option value="agentic">Agentic Search + Jev（无向量）</option><option value="hybrid">BM25 + Embedding + Jev</option><option value="hybrid-gate">Hybrid + Unified Jev Passage Gate</option><option value="line-search">两级 Line-by-line Search（Jev）</option></select></label><button id="reindex" type="button">重新扫描文档</button></div>
+<div class="options"><label>检索模式 <select id="mode"><option value="bm25">BM25 + Jev（默认）</option><option value="agentic">Agentic Search + Jev（无向量）</option><option value="hybrid">BM25 + Embedding + Jev</option><option value="agentic-hybrid">多轮 Agentic + BM25 + Embedding + Jev</option><option value="taxonomy">知识分类树 + Hybrid + Jev</option><option value="hybrid-gate">Hybrid + Unified Jev Passage Gate</option><option value="line-search">两级 Line-by-line Search（Jev）</option></select></label><button id="reindex" type="button">重新扫描文档</button></div>
 <div id="metrics" class="metrics" hidden></div><div id="summary" class="summary"></div>
 <section id="answerPanel" class="panel" hidden><h2>MiniMax 回答</h2><div id="answer" class="answer"></div></section>
 <section id="sourcesPanel" class="panel" hidden><h2>检索证据</h2><div id="sources"></div></section>
@@ -2299,10 +2699,10 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 const $=s=>document.querySelector(s);const esc=s=>(s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>v===null||v===undefined?'—':`${Math.round(v)} ms`;
 let modeInitialized=false;async function status(){const r=await fetch('/api/status');const d=await r.json();if(!modeInitialized&&d.default_retrieval_mode){$('#mode').value=d.default_retrieval_mode;modeInitialized=true}$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code><br>本地目录：<code>${esc(d.documents_root)}</code><br>默认 BM25 + Jev，不建立向量索引`};
-function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Agentic Search',m.agentic_ms],['Embedding / RRF',m.embedding_ms],['Two-level Line Search',m.line_search_ms],['Jev / Passage Gate',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
-function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{let ranks;if(x.line_search_score!==undefined){ranks=`<span>Line #${x.retrieval_rank}</span><span>窗口 ${esc(x.line_window_id)} · 存在 ${(x.line_exists*100).toFixed(0)}%</span><span>段内 #${x.line_rank} · ${(x.line_probability*100).toFixed(1)}%</span><span>全局 ${(x.line_final_probability*100).toFixed(1)}%</span>`}else if(x.agentic_rrf_score!==undefined){ranks=`<span>Agentic RRF #${x.retrieval_rank}</span><span>原始 BM25 ${x.original_bm25_rank!==undefined?'#'+x.original_bm25_rank:'—'}</span><span>最佳词检索 #${x.agentic_best_rank}</span>`}else if(x.rrf_score!==undefined){ranks=`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`}else{ranks=`<span>BM25 #${x.bm25_rank}</span>`}const gate=x.gate_route?`<span class="score">Gate ${esc(x.gate_route)}</span><span>相关 ${(x.gate_relevance*100).toFixed(0)}% · 证据 ${(x.gate_evidence*100).toFixed(0)}% · 矛盾 ${(x.gate_contradiction*100).toFixed(0)}% · 注入 ${(x.gate_injection*100).toFixed(0)}%</span>`:(x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:'');return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${gate}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
+function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Agentic Search',m.agentic_ms],['Embedding / RRF',m.embedding_ms],['知识分类路由',m.taxonomy_ms],['Two-level Line Search',m.line_search_ms],['Jev / Passage Gate',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
+function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{let ranks;if(x.line_search_score!==undefined){ranks=`<span>Line #${x.retrieval_rank}</span><span>窗口 ${esc(x.line_window_id)} · 存在 ${(x.line_exists*100).toFixed(0)}%</span><span>段内 #${x.line_rank} · ${(x.line_probability*100).toFixed(1)}%</span><span>全局 ${(x.line_final_probability*100).toFixed(1)}%</span>`}else if(x.agentic_hybrid_rrf_score!==undefined){ranks=`<span>Agentic Hybrid #${x.retrieval_rank}</span><span>Agentic ${x.agentic_rank!==undefined?'#'+x.agentic_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`}else if(x.agentic_rrf_score!==undefined){ranks=`<span>Agentic RRF #${x.retrieval_rank}</span><span>原始 BM25 ${x.original_bm25_rank!==undefined?'#'+x.original_bm25_rank:'—'}</span><span>最佳词检索 #${x.agentic_best_rank}</span>`}else if(x.taxonomy_rank!==undefined){ranks=`<span>分类扩展 #${x.retrieval_rank}</span><span>节点内 #${x.taxonomy_rank}</span><span>全库 ${x.global_rank!=null?'#'+x.global_rank:'新增候选'}</span>`}else if(x.rrf_score!==undefined){ranks=`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`}else{ranks=`<span>BM25 #${x.bm25_rank}</span>`}const taxonomy=x.taxonomy_nodes?.length?`<span class="score">分类 ${x.taxonomy_nodes.map(esc).join(' / ')}</span>`:'';const gate=x.gate_route?`<span class="score">Gate ${esc(x.gate_route)}</span><span>相关 ${(x.gate_relevance*100).toFixed(0)}% · 证据 ${(x.gate_evidence*100).toFixed(0)}% · 矛盾 ${(x.gate_contradiction*100).toFixed(0)}% · 注入 ${(x.gate_injection*100).toFixed(0)}%</span>`:(x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:'');return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${taxonomy}${gate}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
 $('#form').onsubmit=async e=>{e.preventDefault();const q=$('#q').value.trim();if(!q)return;const clientStart=performance.now();let firstClient=null,answer='',metrics={};$('#go').disabled=true;$('#go').textContent='回答中…';$('#empty').hidden=true;$('#answerPanel').hidden=false;$('#sourcesPanel').hidden=true;$('#answer').textContent='';$('#answer').classList.add('cursor');$('#summary').textContent='正在执行 BM25 召回…';showMetrics(metrics);
-try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,retrieval_mode:$('#mode').value,use_jev:true})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);const labels={bm25:'BM25',agentic:'Agentic Search',hybrid:'混合检索','hybrid-gate':'Hybrid + Passage Gate','line-search':'两级 Line Search'};const mode=labels[ev.retrieval_mode]||ev.retrieval_mode;$('#summary').textContent=`记录 #${ev.run_id} · ${mode}${['line-search','hybrid-gate'].includes(ev.retrieval_mode)?'':' + Jev'} · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
+try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,retrieval_mode:$('#mode').value,use_jev:true})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);const labels={bm25:'BM25',agentic:'Agentic Search',hybrid:'混合检索','agentic-hybrid':'多轮 Agentic Hybrid',taxonomy:'知识分类树','hybrid-gate':'Hybrid + Passage Gate','line-search':'两级 Line Search'};const mode=labels[ev.retrieval_mode]||ev.retrieval_mode;$('#summary').textContent=`记录 #${ev.run_id} · ${mode}${['line-search','hybrid-gate'].includes(ev.retrieval_mode)?'':' + Jev'} · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
 $('#reindex').onclick=async()=>{const b=$('#reindex');b.disabled=true;b.textContent='扫描中…';try{const r=await fetch('/api/index',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.error);await status();b.textContent=`完成：${d.documents} 个文件`;}catch(e){b.textContent='失败：'+e.message}setTimeout(()=>{b.disabled=false;b.textContent='重新扫描文档'},2500)};status();
 </script></body></html>"""
 
@@ -2346,9 +2746,12 @@ class AppHandler(BaseHTTPRequestHandler):
         retrieval_mode = str(
             payload.get("retrieval_mode", self.config["retrieval_mode"])
         ).strip().lower()
-        if retrieval_mode not in {"bm25", "hybrid", "hybrid-gate", "agentic", "line-search"}:
+        if retrieval_mode not in {
+            "bm25", "hybrid", "agentic-hybrid", "hybrid-gate", "taxonomy", "agentic", "line-search"
+        }:
             raise ValueError(
-                "retrieval_mode 必须是 bm25、hybrid、hybrid-gate、agentic 或 line-search"
+                "retrieval_mode 必须是 bm25、hybrid、agentic-hybrid、hybrid-gate、"
+                "taxonomy、agentic 或 line-search"
             )
         if retrieval_mode in {"line-search", "hybrid-gate"} and not use_jev:
             raise ValueError(f"{retrieval_mode} 模式本身依赖 Jev")
@@ -2376,7 +2779,9 @@ class AppHandler(BaseHTTPRequestHandler):
                     "type": "stage",
                     "message": (
                         "正在执行 BM25 + Embedding 召回并做 RRF 融合…"
-                        if retrieval_mode in {"hybrid", "hybrid-gate"}
+                        if retrieval_mode in {"hybrid", "hybrid-gate", "taxonomy"}
+                        else "正在并行执行两轮 Agentic、BM25 与 Embedding…"
+                        if retrieval_mode == "agentic-hybrid"
                         else "正在执行两轮 Agentic 本地检索…"
                         if retrieval_mode == "agentic"
                         else "正在执行两级 Jev Line-by-line Search…"
@@ -2409,11 +2814,14 @@ class AppHandler(BaseHTTPRequestHandler):
             lexical_ms = retrieval_meta["lexical_ms"]
             embedding_ms = retrieval_meta["embedding_ms"]
             agentic_ms = retrieval_meta["agentic_ms"]
+            taxonomy_ms = retrieval_meta.get("taxonomy_ms", 0.0)
             line_search_ms = retrieval_meta["line_search_ms"]
             retrieval_label = {
                 "bm25": "BM25",
                 "hybrid": "混合检索",
+                "agentic-hybrid": "多轮 Agentic Hybrid",
                 "hybrid-gate": "Hybrid + Passage Gate",
+                "taxonomy": "知识分类树",
                 "agentic": "Agentic Search",
                 "line-search": "两级 Line Search",
             }[retrieval_mode]
@@ -2433,6 +2841,7 @@ class AppHandler(BaseHTTPRequestHandler):
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "taxonomy_ms": taxonomy_ms,
                         "line_search_ms": line_search_ms,
                     },
                 }
@@ -2469,6 +2878,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 jev_ms = round((time.perf_counter() - jev_started) * 1000, 1)
             elif use_jev and candidates:
                 jev_started = time.perf_counter()
+                configured_prior = self.config["jev_retrieval_prior_weight"]
+                prior_weight = (
+                    DEFAULT_AGENTIC_HYBRID_JEV_RETRIEVAL_PRIOR_WEIGHT
+                    if configured_prior is None
+                    and retrieval_mode == "agentic-hybrid"
+                    else float(configured_prior or 0.0)
+                )
                 ranked, jev_meta = jev_rerank(
                     self.kb,
                     query,
@@ -2476,6 +2892,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     self.config["provider"],
                     self.config["timeout"],
                     True,
+                    retrieval_prior_weight=prior_weight,
+                    rank_fusion_k=self.config["rrf_k"],
                 )
                 if threshold > 0:
                     ranked = [item for item in ranked if item.get("jev_score", 0) >= threshold]
@@ -2493,11 +2911,15 @@ class AppHandler(BaseHTTPRequestHandler):
                         "bm25_rank", "bm25_score", "vector_rank", "vector_score",
                         "retrieval_rank", "rrf_score", "original_bm25_rank",
                         "agentic_best_rank", "agentic_rrf_score", "snippet", "final_rank",
+                        "agentic_rank", "agentic_hybrid_rrf_score",
+                        "jev_rank", "jev_retrieval_rrf_score",
                         "line_window_id", "line_window_probability", "line_rank",
                         "line_probability", "line_exists", "line_final_probability",
                         "line_search_score",
                         "gate_relevance", "gate_evidence", "gate_contradiction",
                         "gate_injection", "gate_route", "gate_score",
+                        "taxonomy_rank", "global_rank", "taxonomy_rrf_score",
+                        "taxonomy_nodes", "taxonomy_routed",
                     )
                     if key in item
                 }
@@ -2522,6 +2944,7 @@ class AppHandler(BaseHTTPRequestHandler):
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "taxonomy_ms": taxonomy_ms,
                         "line_search_ms": line_search_ms,
                         "jev_ms": jev_ms,
                     },
@@ -2549,6 +2972,7 @@ class AppHandler(BaseHTTPRequestHandler):
                                     "lexical_ms": lexical_ms,
                                     "embedding_ms": embedding_ms,
                                     "agentic_ms": agentic_ms,
+                                    "taxonomy_ms": taxonomy_ms,
                                     "line_search_ms": line_search_ms,
                                     "jev_ms": jev_ms,
                                     "first_token_ms": first_pipeline_token_ms,
@@ -2598,11 +3022,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 "retrieval_mode": retrieval_mode,
                 "embedding_model": (
                     self.config["embedding_model"]
-                    if retrieval_mode in {"hybrid", "hybrid-gate"}
+                    if retrieval_mode in {"hybrid", "agentic-hybrid", "hybrid-gate", "taxonomy"}
                     else None
                 ),
                 "agentic_model": (
-                    self.config["agentic_model"] if retrieval_mode == "agentic" else None
+                    self.config["agentic_model"]
+                    if retrieval_mode in {"agentic", "agentic-hybrid"}
+                    else None
                 ),
                 "use_jev": use_jev,
                 "candidate_count": len(candidates),
@@ -2610,6 +3036,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 "lexical_ms": lexical_ms,
                 "embedding_ms": embedding_ms,
                 "agentic_ms": agentic_ms,
+                "taxonomy_ms": taxonomy_ms,
                 "line_search_ms": line_search_ms,
                 "jev_ms": jev_ms,
                 "first_token_ms": first_pipeline_token_ms,
@@ -2636,6 +3063,7 @@ class AppHandler(BaseHTTPRequestHandler):
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "taxonomy_ms": taxonomy_ms,
                         "line_search_ms": line_search_ms,
                         "jev_ms": jev_ms,
                         "first_token_ms": first_pipeline_token_ms,
@@ -2707,6 +3135,9 @@ class AppHandler(BaseHTTPRequestHandler):
                     line_search_beam=self.config["line_search_beam"],
                     line_search_top_k=self.config["line_search_top_k"],
                     rrf_k=self.config["rrf_k"],
+                    jev_retrieval_prior_weight=self.config[
+                        "jev_retrieval_prior_weight"
+                    ],
                 )
                 self._json(result)
             elif path == "/api/index":
@@ -2725,6 +3156,7 @@ def print_search(result: dict[str, Any]) -> None:
         f"模式 {mode}；BM25 {result['timing']['lexical_ms']} ms，"
         f"Agentic {result['timing'].get('agentic_ms', 0)} ms，"
         f"Embedding {result['timing'].get('embedding_ms', 0)} ms，"
+        f"Taxonomy {result['timing'].get('taxonomy_ms', 0)} ms，"
         f"Line Search {result['timing'].get('line_search_ms', 0)} ms，"
         f"总计 {result['timing']['total_ms']} ms"
     )
@@ -2743,7 +3175,7 @@ def print_search(result: dict[str, Any]) -> None:
                 f"段内#{item.get('line_rank')} {item.get('line_probability', 0):.1%} / "
                 f"全局 {item.get('line_final_probability', 0):.1%}"
             )
-        elif mode in {"hybrid", "hybrid-gate"}:
+        elif mode in {"hybrid", "hybrid-gate", "taxonomy"}:
             bm25 = f"BM25 #{item['bm25_rank']}" if "bm25_rank" in item else "BM25 —"
             vector = f"Vector #{item['vector_rank']}" if "vector_rank" in item else "Vector —"
             rank = f"RRF #{item['retrieval_rank']} · {bm25} · {vector}"
@@ -2755,6 +3187,24 @@ def print_search(result: dict[str, Any]) -> None:
                     f"矛盾 {item.get('gate_contradiction', 0):.0%} / "
                     f"注入 {item.get('gate_injection', 0):.0%}"
                 )
+            if "taxonomy_rank" in item:
+                rank += (
+                    f" · 分类节点内 "
+                    f"{('#' + str(item['taxonomy_rank'])) if 'taxonomy_rank' in item else '—'} / "
+                    f"全库 {('#' + str(item['global_rank'])) if 'global_rank' in item else '—'}"
+                )
+        elif mode == "agentic-hybrid":
+            agentic = (
+                f"Agentic #{item['agentic_rank']}"
+                if "agentic_rank" in item
+                else "Agentic —"
+            )
+            vector = (
+                f"Vector #{item['vector_rank']}"
+                if "vector_rank" in item
+                else "Vector —"
+            )
+            rank = f"Agentic Hybrid RRF #{item['retrieval_rank']} · {agentic} · {vector}"
         elif mode == "agentic":
             original = (
                 f"原始 BM25 #{item['original_bm25_rank']}"
@@ -2776,7 +3226,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Jev RAG：默认 BM25 → Jev，可选 Agentic、Embedding、"
-            "Unified Passage Gate 或两级 Line Search"
+            "知识分类树、Unified Passage Gate 或两级 Line Search"
         )
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {APP_VERSION}")
@@ -2805,7 +3255,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="BM25 候选数")
     search_parser.add_argument(
         "--retrieval-mode",
-        choices=["bm25", "agentic", "hybrid", "hybrid-gate", "line-search"],
+        choices=["bm25", "agentic", "hybrid", "agentic-hybrid", "taxonomy", "hybrid-gate", "line-search"],
         default=DEFAULT_RETRIEVAL_MODE,
         help="召回模式（默认 bm25）",
     )
@@ -2839,6 +3289,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--line-search-top-k", type=int, default=DEFAULT_LINE_SEARCH_TOP_K
     )
     search_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
+    search_parser.add_argument(
+        "--jev-retrieval-prior-weight",
+        type=float,
+        default=None,
+        help=(
+            "Jev 排名后融合原召回排名的 RRF 权重。Agentic Hybrid 默认 "
+            f"{DEFAULT_AGENTIC_HYBRID_JEV_RETRIEVAL_PRIOR_WEIGHT}，其他模式默认 0"
+        ),
+    )
     search_parser.add_argument("--top-n", type=int, default=10, help="Jev 重排后的最终证据数")
     search_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
     search_parser.add_argument("--provider", choices=["openrouter", "typesafe"], default="openrouter")
@@ -2870,7 +3329,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     serve_parser.add_argument(
         "--retrieval-mode",
-        choices=["bm25", "agentic", "hybrid", "hybrid-gate", "line-search"],
+        choices=["bm25", "agentic", "hybrid", "agentic-hybrid", "taxonomy", "hybrid-gate", "line-search"],
         default=DEFAULT_RETRIEVAL_MODE,
     )
     serve_parser.add_argument("--hybrid-top-k", type=int, default=DEFAULT_HYBRID_TOP_K)
@@ -2897,6 +3356,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--line-search-top-k", type=int, default=DEFAULT_LINE_SEARCH_TOP_K
     )
     serve_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
+    serve_parser.add_argument(
+        "--jev-retrieval-prior-weight",
+        type=float,
+        default=None,
+        help=(
+            "Jev 排名后融合原召回排名的 RRF 权重。Agentic Hybrid 默认 "
+            f"{DEFAULT_AGENTIC_HYBRID_JEV_RETRIEVAL_PRIOR_WEIGHT}，其他模式默认 0"
+        ),
+    )
     serve_parser.add_argument("--top-n", type=int, default=10)
     serve_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
     serve_parser.add_argument("--timeout", type=float, default=60.0)
@@ -2945,6 +3413,7 @@ def main() -> int:
                 line_search_beam=args.line_search_beam,
                 line_search_top_k=args.line_search_top_k,
                 rrf_k=args.rrf_k,
+                jev_retrieval_prior_weight=args.jev_retrieval_prior_weight,
             )
             if args.as_json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -2974,6 +3443,7 @@ def main() -> int:
                 "line_search_beam": args.line_search_beam,
                 "line_search_top_k": args.line_search_top_k,
                 "rrf_k": args.rrf_k,
+                "jev_retrieval_prior_weight": args.jev_retrieval_prior_weight,
                 "top_n": args.top_n,
                 "threshold": args.threshold,
                 "timeout": args.timeout,

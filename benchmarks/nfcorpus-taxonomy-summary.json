@@ -1,0 +1,54 @@
+{
+  "benchmark": "BEIR NFCorpus",
+  "split": "test",
+  "date": "2026-09-27",
+  "version": "0.6.0",
+  "queries": 323,
+  "documents": 3633,
+  "mode": "taxonomy+bm25+embedding+rrf+jev:openrouter",
+  "taxonomy": {
+    "top_nodes": 12,
+    "leaf_nodes": 62,
+    "target_leaf_size": 64,
+    "routed_leaves": 4,
+    "minimum_routed_items": 200,
+    "extra_candidates": 20,
+    "uses_queries_for_construction": false,
+    "uses_qrels_for_construction": false
+  },
+  "candidate_pool": {
+    "min": 50,
+    "mean": 67.76,
+    "max": 70,
+    "retrieval_recall_at_50": 0.318075,
+    "retrieval_recall_at_70": 0.342964,
+    "queries_with_added_relevant_documents": 121
+  },
+  "metrics": {
+    "ndcg_at_1": 0.551084,
+    "ndcg_at_10": 0.441851,
+    "mrr_at_10": 0.654006,
+    "map_at_10": 0.334660,
+    "recall_at_10": 0.214344,
+    "recall_at_50": 0.330883,
+    "recall_at_70": 0.342964
+  },
+  "comparison_to_hybrid_jev": {
+    "baseline_ndcg_at_10": 0.444327,
+    "absolute_delta": -0.002476,
+    "queries_improved": 58,
+    "queries_tied": 194,
+    "queries_degraded": 71
+  },
+  "usage": {
+    "input_tokens": 11919795,
+    "output_tokens": 503311,
+    "provider_cost_usd": 0.50063139
+  },
+  "latency_ms": {
+    "median": 1097.18,
+    "p95": 17231.70,
+    "cold_run": false
+  },
+  "conclusion": "Taxonomy routing improved candidate recall but did not improve final nDCG@10 over Hybrid plus Jev."
+}

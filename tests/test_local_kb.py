@@ -16,6 +16,7 @@ from local_kb import (
     _line_search_windows,
     agentic_rank_fusion,
     agentic_retrieve,
+    agentic_vector_rank_fusion,
     answer_messages,
     build_parser,
     checkout_exclude_pattern,
@@ -104,6 +105,20 @@ class PassageTests(unittest.TestCase):
             ["search", "query", "--retrieval-mode", "hybrid-gate"]
         )
         self.assertEqual(args.retrieval_mode, "hybrid-gate")
+        self.assertEqual(DEFAULT_RETRIEVAL_MODE, "bm25")
+
+    def test_taxonomy_is_available_without_becoming_default(self):
+        args = build_parser().parse_args(
+            ["search", "query", "--retrieval-mode", "taxonomy"]
+        )
+        self.assertEqual(args.retrieval_mode, "taxonomy")
+        self.assertEqual(DEFAULT_RETRIEVAL_MODE, "bm25")
+
+    def test_agentic_hybrid_is_available_without_becoming_default(self):
+        args = build_parser().parse_args(
+            ["search", "query", "--retrieval-mode", "agentic-hybrid"]
+        )
+        self.assertEqual(args.retrieval_mode, "agentic-hybrid")
         self.assertEqual(DEFAULT_RETRIEVAL_MODE, "bm25")
 
     def test_default_document_root_prefers_documents_folder(self):
@@ -215,6 +230,25 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(fused[0]["original_bm25_rank"], 2)
         self.assertEqual(fused[0]["agentic_best_rank"], 1)
         self.assertNotIn("bm25_rank", fused[-1])
+
+    def test_agentic_hybrid_fuses_agentic_and_vector_rankings(self):
+        base = {
+            "title": "t", "heading": "h", "path": "p", "body": "b",
+            "start_line": 1, "end_line": 1, "snippet": "b",
+        }
+        agentic = [
+            dict(base, rowid=1, agentic_rrf_score=0.2),
+            dict(base, rowid=2, agentic_rrf_score=0.1),
+        ]
+        vector = [dict(base, rowid=2), dict(base, rowid=3)]
+        fused = agentic_vector_rank_fusion(
+            agentic, vector, limit=3, rrf_k=60, agentic_weight=1.0, vector_weight=1.0
+        )
+
+        self.assertEqual([item["rowid"] for item in fused], [2, 1, 3])
+        self.assertEqual(fused[0]["agentic_rank"], 2)
+        self.assertEqual(fused[0]["vector_rank"], 1)
+        self.assertEqual(fused[0]["retrieval_rank"], 1)
 
     def test_agentic_retrieval_runs_two_cached_planning_rounds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -331,10 +365,119 @@ class SearchTests(unittest.TestCase):
 
         self.assertEqual(sorted(calls), [3, 10, 10])
         self.assertEqual(meta["batch_count"], 3)
+        self.assertEqual(meta["batch_size"], 10)
+        self.assertEqual(meta["candidate_max_chars"], 1800)
         self.assertEqual(meta["usage"]["input_tokens"], 23)
         self.assertAlmostEqual(meta["usage"]["cost"], 0.03)
         self.assertEqual(ranked[0]["rowid"], 23)
         self.assertEqual(ranked[-1]["rowid"], 1)
+
+    def test_jev_rerank_supports_one_compact_batch(self):
+        class MemoryCache:
+            def cache_get(self, key):
+                return None
+
+            def cache_put(self, key, value):
+                return None
+
+        candidates = [
+            {
+                "rowid": index,
+                "body": "evidence " * 500,
+                "title": f"candidate {index}",
+                "heading": "section",
+                "path": f"{index}.txt",
+                "retrieval_rank": index,
+            }
+            for index in range(1, 51)
+        ]
+        observed = {}
+
+        def fake_decision(provider, state, questions, timeout):
+            observed["candidates"] = len(state["candidates"])
+            observed["max_text"] = max(len(item["text"]) for item in state["candidates"])
+            answers = {
+                key: {"type": "noul", "noul": 0.5}
+                for key in questions
+            }
+            return {
+                "gateway": provider,
+                "provider": "test",
+                "model": "jev-test",
+                "answers": answers,
+                "usage": {},
+            }
+
+        with patch("local_kb.request_decision", side_effect=fake_decision):
+            _, meta = jev_rerank(
+                MemoryCache(),
+                "query",
+                candidates,
+                batch_size=50,
+                candidate_max_chars=600,
+            )
+
+        self.assertEqual(observed["candidates"], 50)
+        self.assertLessEqual(observed["max_text"], 603)
+        self.assertEqual(meta["batch_count"], 1)
+        self.assertEqual(meta["batch_size"], 50)
+        self.assertEqual(meta["candidate_max_chars"], 600)
+
+    def test_jev_rerank_can_fuse_cached_jev_and_retrieval_ranks(self):
+        class MemoryCache:
+            def __init__(self):
+                self.value = None
+
+            def cache_get(self, key):
+                del key
+                return self.value
+
+            def cache_put(self, key, value):
+                del key
+                self.value = value
+
+        candidates = [
+            {
+                "rowid": index,
+                "body": f"candidate {index}",
+                "title": f"candidate {index}",
+                "heading": "section",
+                "path": f"{index}.txt",
+                "retrieval_rank": index,
+            }
+            for index in range(1, 4)
+        ]
+
+        def fake_decision(provider, state, questions, timeout):
+            del state, questions, timeout
+            return {
+                "gateway": provider,
+                "provider": "test",
+                "model": "jev-test",
+                "answers": {
+                    "relevance_0": {"noul": 0.1},
+                    "relevance_1": {"noul": 0.5},
+                    "relevance_2": {"noul": 0.9},
+                    "has_answer": {"noul": 0.9},
+                },
+                "usage": {},
+            }
+
+        cache = MemoryCache()
+        with patch("local_kb.request_decision", side_effect=fake_decision):
+            jev_only, _ = jev_rerank(cache, "query", candidates)
+        with patch("local_kb.request_decision") as cached_request:
+            fused, meta = jev_rerank(
+                cache, "query", candidates, retrieval_prior_weight=10.0
+            )
+
+        cached_request.assert_not_called()
+        self.assertEqual([item["rowid"] for item in jev_only], [3, 2, 1])
+        self.assertEqual([item["rowid"] for item in fused], [1, 2, 3])
+        self.assertTrue(meta["cache_hit"])
+        self.assertTrue(meta["retrieval_prior_applied"])
+        self.assertEqual(meta["retrieval_prior_weight"], 10.0)
+        self.assertIn("jev_retrieval_rrf_score", fused[0])
 
     def test_unified_passage_gate_routes_and_ranks_candidates(self):
         class MemoryCache:

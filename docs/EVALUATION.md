@@ -130,6 +130,28 @@ The same retrieval path is available in the application with
 application keeps `bm25` as its default, so installing the project does not
 silently create embeddings or send corpus text to an embedding provider.
 
+## Evaluate corpus taxonomy routing
+
+Taxonomy mode builds a two-level tree from corpus embeddings only, preserves
+the global Hybrid top 50, and appends up to 20 unique candidates from routed
+leaf nodes before ordinary Jev reranking:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 --rrf-k 60 \
+  --taxonomy --taxonomy-extra-candidates 20 \
+  --use-jev --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-taxonomy-hybrid-jev-top70.json
+```
+
+The tree is cached locally and records that neither benchmark queries nor qrels
+were used during construction. The full run reached 0.342964 candidate recall
+at 70 versus 0.318075 at the preserved Hybrid top 50, but final nDCG@10 was
+0.441851 versus 0.444327 for Hybrid + Jev. Treat the mode as an inspectable
+candidate-expansion experiment, not a benchmark improvement claim.
+
 ## Evaluate Hybrid + Unified Passage Gate
 
 The Passage Gate uses the same Hybrid top-50 candidate pool, but replaces
@@ -182,6 +204,37 @@ judgments are cached locally. Official relevance judgments are used only after
 ranking to calculate metrics; they are never included in planner prompts. The
 `medical` domain hint is disclosed because NFCorpus is a medical collection;
 the application default is domain-neutral.
+
+## Evaluate multi-round Agentic Hybrid + Jev
+
+This mode combines the complete two-round Agentic lexical ranking with the
+original query's dense ranking, then applies the ordinary Jev reranker. Select
+fusion weights on a development split; do not tune them on the final test set.
+The published run selected `0.65:1.0` on `dev` and evaluated `test` once:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 --rrf-k 60 \
+  --agentic-hybrid --agentic-rounds 2 --agentic-queries 5 \
+  --agentic-per-query-k 100 --agentic-domain-hint medical \
+  --agentic-weight 0.65 --vector-weight 1.0 \
+  --use-jev --jev-retrieval-prior-weight 0.25 --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-prior-test.json
+```
+
+The dev-selected post-rerank fusion gives Jev rank weight `1.0` and original
+retrieval rank weight `0.25`. It reached `0.412509` nDCG@10 on `dev`, then
+`0.450750` on the fixed `test` run versus `0.445761` for the Jev-only order.
+It adds no provider call. The paired 20,000-sample bootstrap interval for the
+test delta was `[0.000397, 0.009757]`. The underlying two-round retrieval is
+still expensive: its cold retrieval-only median was `6.99 s`.
+
+For robustness experiments, ordinary Jev reranking also accepts
+`--jev-batch-size` and `--jev-candidate-max-chars`. A ten-query pilot found
+that one compact batch of 50 was promising, but it is not a full benchmark and
+the default remains batches of ten.
 
 ## Evaluate two-level Line Search
 

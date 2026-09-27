@@ -4,6 +4,69 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-27
+
+### Added
+
+- A seventh `agentic-hybrid` retrieval mode: two rounds of model-planned
+  lexical searches feed local multi-query BM25 while the original query's
+  embedding lookup runs in parallel; weighted RRF keeps 50 candidates for the
+  existing Jev reranker.
+- Web UI, CLI, latency reporting, source-rank inspection, benchmark flags, and
+  regression tests for the new pipeline.
+- Complete BEIR NFCorpus disclosure for both the pre-Jev retrieval order and
+  the final Jev ranking, plus a machine-readable summary.
+- Optional post-rerank RRF between the Jev order and the original retrieval
+  order. Agentic Hybrid uses the dev-selected `1.0:0.25` ratio by default and
+  can disable it with `--jev-retrieval-prior-weight 0`.
+- Experimental Jev batch-size and candidate-text controls for benchmark
+  robustness checks; the production default remains ten candidates per call.
+
+### Changed
+
+- Agentic planner responses with empty, truncated, or invalid JSON now retry
+  with progressively larger output limits and a less restrictive fallback.
+- The default Agentic-Hybrid fusion weight is `0.65:1.0` for Agentic versus
+  dense retrieval, selected on the NFCorpus dev split before one fixed test
+  evaluation.
+
+### Benchmark
+
+- Agentic-Hybrid retrieval reached `0.424145` nDCG@10 and `0.333047`
+  Recall@50 on the full 323-query NFCorpus test split.
+- Agentic-Hybrid + Jev reached `0.445761` nDCG@10 before post-rerank prior
+  fusion, only `+0.001434` over Hybrid + Jev. A paired
+  20,000-sample bootstrap interval (`[-0.006883, 0.009834]`) crosses zero, so
+  the result is reported as statistically tied rather than a clear win.
+- The two-round planner added substantial latency: the cold retrieval-only run
+  measured a `6.99 s` median and `24.39 s` p95.
+- Dev-selected Jev/retrieval rank fusion raised the fixed test result to
+  `0.450750` nDCG@10 without another provider call. Its paired 20,000-sample
+  bootstrap delta interval versus Jev-only ordering was
+  `[0.000397, 0.009757]`.
+
+## [0.6.0] - 2026-09-27
+
+### Added
+
+- An experimental sixth `taxonomy` mode that builds a deterministic two-level
+  corpus taxonomy from cached embeddings, routes each query to relevant leaf
+  nodes, and appends up to 20 unique node-local candidates to the unchanged
+  Hybrid top-50 pool before ordinary Jev reranking.
+- Persistent JSON/NPZ taxonomy caches, readable node labels, primary and
+  near-boundary secondary document assignments, UI/CLI timing, and benchmark
+  controls. Taxonomy construction uses corpus documents only, never benchmark
+  queries or relevance judgments.
+- Complete BEIR NFCorpus disclosure: taxonomy expansion increased candidate
+  recall from 0.318075 at 50 to 0.342964 at 70, but final nDCG@10 was 0.441851,
+  slightly below Hybrid + Jev at 0.444327. The mode remains experimental and
+  is not the default.
+
+### Changed
+
+- Jev reranking can execute up to eight independent ten-candidate batches in
+  parallel, reducing the extra wait introduced by 70-candidate taxonomy pools.
+
 ## [0.5.0] - 2026-09-27
 
 ### Added

@@ -1,6 +1,6 @@
 # Jev RAG
 
-**Jev RAG 是一个开源的本地知识库检索工具，提供五种可切换路径：默认 BM25 + Jev、无向量 Agentic Search、Embedding 混合检索、统一 Jev Passage Gate，以及两级 Jev Line Search。**
+**Jev RAG 是一个开源的本地知识库检索工具，提供七种可切换路径：默认 BM25 + Jev、无向量 Agentic Search、Embedding 混合检索、多轮 Agentic Hybrid、知识分类树路由、统一 Jev Passage Gate，以及两级 Jev Line Search。**
 
 它可以搜索本地文件夹，用 Jev 对候选文段重排，再由回答模型输出带文件引用的答案。默认路径不需要 Embedding 或向量数据库。准确地说，Jev RAG 是“本地优先”而不是“完全离线”：选中的候选文段会发送给配置的 Jev 与回答模型服务。
 
@@ -30,8 +30,12 @@ BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询。所有结果�
 | Hybrid Top 50 + 统一 Passage Gate | 0.376298 | 0.618043 | 0.166977 |
 | Agentic 词法检索 Top 50 | 0.380168 | 0.597940 | 0.185464 |
 | BM25 Top 50 + Embedding Top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
+| 多轮 Agentic Hybrid Top 50 | 0.424145 | 0.637722 | 0.206303 |
 | **Agentic 词法检索 Top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
-| **混合召回 Top 50 + Jev** | **0.444327** | **0.654583** | **0.214907** |
+| 分类树扩展 Hybrid Top 70 + Jev | 0.441851 | 0.654006 | 0.214344 |
+| 混合召回 Top 50 + Jev | 0.444327 | **0.654583** | 0.214907 |
+| 多轮 Agentic Hybrid Top 50 + Jev | 0.445761 | 0.645722 | 0.217207 |
+| **Agentic Hybrid + Jev/原召回排名融合** | **0.450750** | **0.652606** | **0.220885** |
 
 Line Search 的首条命中表现最好（`nDCG@1=0.554180`），但多文档排序质量与召回率
 都低于 Agentic 和 Hybrid。全语料冷跑的供应商费用为 `$4.553288`，因此它属于
@@ -42,14 +46,33 @@ Line Search 的首条命中表现最好（`nDCG@1=0.554180`），但多文档排
 Hybrid（0.396712）和 Hybrid + Jev（0.444327）。它仍作为提示注入筛查与
 问题前提检查的实验模式，但不是默认精度路径。
 
+知识分类树也按负结果如实披露：它把候选池召回从 Top 50 的
+`0.318075` 提高到 Top 70 的 `0.342964`，但最终 nDCG@10 为
+`0.441851`，略低于 Hybrid + Jev 的 `0.444327`。因此它是候选扩展
+实验，不是新的最佳分数宣称。
+
+多轮 Agentic Hybrid 的 nDCG@10 点估计最高，为 `0.445761`，
+但只比 Hybrid + Jev 高 `0.001434`。20,000 次配对 bootstrap
+的 95% 区间为 `[-0.006883, 0.009834]`，跨过 0，因此两者应视为
+统计持平。它把候选 Recall@50 提高到 `0.333047`，但两轮规划的
+冷跑检索中位延迟为 `6.99 秒`，P95 为 `24.39 秒`。
+
+在 Jev 之后增加了一次开发集选定的 RRF，保留部分原召回顺序
+（Jev 排名权重 `1.0`，原召回排名权重 `0.25`）。这一步不增加任何
+模型调用，测试集 nDCG@10 从 `0.445761` 提升到 `0.450750`。
+相对纯 Jev 排序，100 题提升、158 题持平、65 题下降；20,000 次
+配对 bootstrap 的 95% 区间为 `[0.000397, 0.009757]`。
+
 以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
-`0.444327` 约为 **251 个结果中第 4（Top 1.6%）**。这是一个**非官方的数值比较**，
+`0.450750` 约为 **251 个结果中第 4（Top 1.6%）**。这是一个**非官方的数值比较**，
 不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且 Top 50 参数是在同一测试集上观察的。
 
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
 · [Agentic 机器可读结果](benchmarks/nfcorpus-agentic-summary.json)
 · [Line Search 机器可读结果](benchmarks/nfcorpus-line-search-summary.json)
 · [Passage Gate 机器可读结果](benchmarks/nfcorpus-passage-gate-summary.json)
+· [知识分类树机器可读结果](benchmarks/nfcorpus-taxonomy-summary.json)
+· [Agentic Hybrid 机器可读结果](benchmarks/nfcorpus-agentic-hybrid-summary.json)
 
 ![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
@@ -57,6 +80,8 @@ Hybrid（0.396712）和 Hybrid + Jev（0.444327）。它仍作为提示注入筛
 默认：本地文件 → SQLite BM25 ──────────────────→ Jev → MiniMax
 Agentic：本地文件 → MiniMax 规划 → 多路 BM25/RRF → Jev → MiniMax
 混合：本地文件 → BM25 + OpenRouter Embedding/RRF → Jev → MiniMax
+Agentic Hybrid：两轮规划 → 多路 BM25 + Embedding/RRF → Jev + 原召回先验 → MiniMax
+分类树：本地文件 → 语料分类树 → Hybrid Top 50 + 路由补充 → Jev → MiniMax
 Gate：本地文件 → BM25 + Embedding/RRF → 统一 Jev Gate → MiniMax
 Line：本地文件 → 并行 Jev Choice 窗口 → 全局 Choice → MiniMax
 ```
@@ -64,9 +89,16 @@ Line：本地文件 → 并行 Jev Choice 窗口 → 全局 Choice → MiniMax
 Jev RAG 默认只用 SQLite FTS5/BM25，不需要 Embedding、向量数据库或 GPU。
 需要更强召回时，可在网页或 CLI 切换到 Agentic 模式，让 MiniMax 规划两轮
 本地关键词搜索，完全不建立向量索引；也可以切换到 BM25 + Embedding + RRF。
+多轮 Agentic Hybrid 则保留两轮规划，让多路 BM25 与原问题的
+Embedding 查询并行，再按 `0.65:1.0` 加权 RRF 融合后交给 Jev。
+然后以 `1.0:0.25` 融合 Jev 排名和原召回排名；这一步完全本地执行，
+不增加模型调用。
 前三种模式复用同一个 Jev 证据重排；Passage Gate 以一轮四项判断
 取代普通重排；Line Search 则让所有索引文段进入
 Jev 窗口 Choice，再对每个窗口的优胜文段执行第二级全局 Choice。
+分类树模式只用语料 embedding 构建确定性两层树，查询时路由到
+4 个叶子节点，在不改变原 Hybrid Top 50 的前提下最多补充 20 条候选。
+构建分类树不使用测试问题或标准答案。
 
 > 当前状态：Alpha。适合本地试用和二次开发，但 1.0 之前接口与数据库结构可能调整。
 
@@ -75,6 +107,10 @@ Jev 窗口 Choice，再对每个窗口的优胜文段执行第二级全局 Choic
 - 默认 BM25 + Jev，无向量、无 Embedding、无外部索引服务。
 - 可选两轮 Agentic Search + Jev，无需向量索引即可改善同义词召回。
 - 可选 BM25 + Embedding 倒数排名融合（RRF），再进入 Jev。
+- 可选多轮 Agentic BM25 + 原问题 Embedding 并行融合后进入 Jev。
+  开发集选定的 Jev/原召回排名融合不增加模型调用，但规划延迟仍较高。
+- 可选两层知识分类树路由，为 Hybrid 扩展候选；公开测试提高了
+  候选召回，但没有提高 nDCG@10。
 - 可选 Hybrid + 统一 Jev Passage Gate，同时判断相关性、可用证据、
   事实前提矛盾和提示注入；固定阈值在 NFCorpus 上未提升 nDCG@10。
 - 可选两级 Jev Line Search：每个窗口最多 255 段，结构容量
@@ -132,7 +168,8 @@ jev-rag serve
 
 浏览器打开 <http://127.0.0.1:8765>。
 页面可切换 **BM25 + Jev（默认）**、**Agentic Search + Jev**、
-**BM25 + Embedding + Jev** 和 **两级 Line-by-line Search**。
+**BM25 + Embedding + Jev**、**多轮 Agentic + BM25 + Embedding + Jev**
+和其他实验性路由/检索模式。
 启动时会自动更新本地 BM25 索引；默认模式不生成 Embedding，
 也不需要向量数据库。
 
@@ -180,6 +217,12 @@ jev-rag \
 - 默认检索模式是 `bm25`。
 - BM25 最多召回 30 个文段。
 - 混合模式使用 BM25 Top 50 + Embedding Top 50，通过 RRF 保留 50 个候选（`rrf_k=60`）。
+- Agentic Hybrid 使用两轮规划、每轮最多 5 组词法查询；
+  多路 BM25 与原问题 Embedding 查询并行，通过 `0.65:1.0`
+  加权 RRF 保留 50 个候选交给 Jev，再通过零调用的
+  Jev/原召回排名融合（`1.0:0.25`）生成最终顺序。
+- 分类树模式保留原 Hybrid Top 50，通过本地缓存的两层语料树路由，
+  再最多补充 20 条节点内候选交给 Jev。
 - Agentic 模式使用两轮规划，每轮最多 5 组检索词，每组 BM25 Top 100，通过 RRF 保留 50 个候选。
 - Line Search 模式每个窗口最多 255 个文段，每个窗口默认保留 4 个优胜文段，
   最多 255 个窗口；第二级 Choice 在所有优胜文段中完成全局排序。
@@ -225,11 +268,17 @@ jev-rag search '问题' --no-jev
 # 混合召回后使用 Jev 重排。
 jev-rag search '问题' --retrieval-mode hybrid
 
+# 知识分类树路由 + Hybrid 候选扩展（实验性）。
+jev-rag search '问题' --retrieval-mode taxonomy
+
 # 混合召回后使用一轮统一 Jev Passage Gate（实验性）。
 jev-rag search '问题' --retrieval-mode hybrid-gate
 
 # 两轮 Agentic 本地词法检索后使用 Jev，不建立向量索引。
 jev-rag search '问题' --retrieval-mode agentic
+
+# 两轮 Agentic BM25 与原问题 Embedding 并行，再使用 Jev。
+jev-rag search '问题' --retrieval-mode agentic-hybrid
 
 # 全量文段进入并行 Jev 窗口，再对窗口优胜段做第二级全局 Choice。
 jev-rag search '问题' --retrieval-mode line-search

@@ -7,7 +7,8 @@ OpenRouter.
 ## Run configuration
 
 - Date: 2026-09-26
-- Jev RAG version: 0.2.0
+- Report version: Jev RAG 0.7.0 (individual experiments below record their
+  implementation version)
 - Corpus: 3,633 documents
 - Test queries: 323
 - Dataset archive SHA-256:
@@ -179,6 +180,82 @@ Use `--limit-queries 10` for a lower-cost connectivity check before a full run.
 The compact machine-readable disclosure is stored in
 [`nfcorpus-agentic-summary.json`](nfcorpus-agentic-summary.json).
 
+## Multi-round Agentic Hybrid experiment
+
+Version 0.7.0 combines the two-round Agentic lexical branch with dense
+retrieval. For each query, MiniMax plans five lexical searches in round one and
+five follow-up searches after inspecting up to eight first-round snippets. The
+original query and generated searches run against local BM25; in the
+application, the original query's embedding request runs concurrently with the
+Agentic branch. Weighted RRF (`agentic=0.65`, `vector=1.0`, `k=60`) retains 50
+candidates for the unchanged Jev reranker. Generated searches are not embedded.
+
+The weight was selected on the NFCorpus dev split. The test split was then run
+once with the fixed configuration.
+
+| Pipeline | nDCG@10 | MRR@10 | MAP@10 | Recall@10 | Recall@50 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Bare Hybrid top 50 | 0.396712 | 0.632089 | 0.295243 | 0.193977 | 0.318075 |
+| Multi-round Agentic Hybrid top 50 | 0.424145 | 0.637722 | 0.321039 | 0.206303 | **0.333047** |
+| Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.337663 | 0.214907 | 0.318075 |
+| Multi-round Agentic Hybrid top 50 + Jev | 0.445761 | 0.645722 | 0.341929 | 0.217207 | **0.333047** |
+| **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.345403** | **0.220885** | **0.333047** |
+
+The fused retrieval order improved nDCG@10 by `0.027433` (6.92% relative)
+and Recall@50 by `0.014972` over bare Hybrid. After Jev, the new pipeline's
+`0.445761` nDCG@10 was only
+`0.001434` (0.32% relative) above Hybrid + Jev. Per-query comparison found 97
+improvements, 142 ties, and 84 degradations. A paired 20,000-sample bootstrap
+95% interval for the difference was `[-0.006883, 0.009834]`, so the evidence
+does not establish a statistically significant win for the Jev-only order.
+The separately dev-selected post-rerank prior then reached `0.450750` without
+changing the candidate pool or adding a provider call.
+
+The cold retrieval-only run measured 6,990.67 ms median and 24,391.42 ms p95
+latency. It reported 437,433 planner prompt tokens, 50,241 completion tokens,
+and `$0.16607392` planner cost. The Jev pass reported 8,833,108 input tokens,
+369,835 output tokens, and `$0.37099054` cost. The application overlaps the
+query-embedding request with the Agentic branch, but the two planner rounds are
+sequential by design. Corpus embeddings remain a separately cached, one-time
+indexing cost.
+
+Reproduce the fixed test configuration with:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 --rrf-k 60 \
+  --agentic-hybrid --agentic-rounds 2 --agentic-queries 5 \
+  --agentic-per-query-k 100 --agentic-domain-hint medical \
+  --agentic-weight 0.65 --vector-weight 1.0 \
+  --use-jev --jev-retrieval-prior-weight 0.25 --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-prior-test.json
+```
+
+The post-rerank retrieval prior was selected on all 324 `dev` queries. Jev
+rank weight `1.0` plus original retrieval rank weight `0.25` reached
+`0.412509` dev nDCG@10. The fixed test run reached `0.450750` nDCG@10,
+`0.652606` MRR@10, `0.345403` MAP@10, and `0.220885` Recall@10. This is a
+local rank fusion over already available ranks, so it adds no provider call,
+tokens, or cost.
+
+Against the same test run ordered by Jev alone (`0.445761`), the prior-aware
+order improved 100 queries, tied on 158, and degraded 65. A paired 20,000
+sample bootstrap interval for the `+0.004989` nDCG@10 delta was
+`[0.000397, 0.009757]`. This comparison isolates only the final ordering;
+candidate recall remains unchanged at `0.333047` at 50.
+
+A separate ten-query `dev` pilot tested all 50 compact 600-character
+candidates in one Jev request. On the exact same candidate lists it scored
+`0.373795` nDCG@10 versus `0.367176` for five batches of ten, with median Jev
+latency of 1,536 ms versus 2,315 ms and observed cost of `$0.00656758` versus
+`$0.00709191`. This is a small stability pilot, not a full benchmark result;
+the production default therefore remains ten candidates per Jev request.
+
+The compact disclosure is stored in
+[`nfcorpus-agentic-hybrid-summary.json`](nfcorpus-agentic-hybrid-summary.json).
+
 ## Two-level Jev Line Search experiment
 
 On 2026-09-27, version 0.4.0 evaluated the TypeSafe Semantic Find pattern as a
@@ -258,12 +335,58 @@ python scripts/benchmark_beir.py \
   --output .knowledge/public-benchmarks/results/nfcorpus-hybrid-passage-gate.json
 ```
 
+## Corpus taxonomy routing experiment
+
+On 2026-09-27, version 0.6.0 built a deterministic two-level taxonomy from the
+3,633 cached corpus embeddings: 12 top-level branches and 62 leaf nodes, with a
+target leaf size of 64. Each document has one primary leaf and can receive a
+near-boundary secondary assignment. Queries route to four leaves covering at
+least 200 assigned documents. The original Hybrid top 50 remains unchanged;
+up to 20 unique node-local BM25/embedding/RRF candidates are appended before
+ordinary Jev reranking. Taxonomy construction used neither queries nor qrels.
+
+| Pipeline | nDCG@10 | MRR@10 | MAP@10 | Recall@10 | Recall@50 | Recall@70 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bare Hybrid top 50 | 0.396712 | 0.632089 | 0.295243 | 0.193977 | 0.318075 | - |
+| Hybrid top 50 + Jev | **0.444327** | **0.654583** | **0.337663** | **0.214907** | 0.318075 | - |
+| Taxonomy-expanded Hybrid top 70 + Jev | 0.441851 | 0.654006 | 0.334660 | 0.214344 | **0.330883** | **0.342964** |
+
+The expanded retrieval pool improved recall from `0.318075` at 50 to
+`0.342964` at 70; 121 of 323 queries gained at least one relevant document in
+the appended portion. Final nDCG@10 was nevertheless 0.002476 lower than
+Hybrid + Jev. Per-query comparison found 58 improvements, 194 ties, and 71
+degradations. The evidence supports taxonomy routing as a recall-expansion
+mechanism, but not as a new best final-ranking configuration. Better score
+calibration or a global third-stage reranker is the next experiment.
+
+The candidate pool contained 50--70 passages (mean 67.76). The complete Jev
+run reported 11,919,795 input tokens, 503,311 output tokens, and `$0.50063139`
+provider cost. Observed median latency was 1,097.18 ms and p95 was 17,231.70 ms;
+cached responses from interrupted/resumed runs mean this is not a clean cold
+latency claim. Corpus and query embeddings reused the existing local cache.
+
+Reproduce the experiment with:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 50 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 50 --rrf-k 60 \
+  --taxonomy --taxonomy-extra-candidates 20 \
+  --use-jev --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-taxonomy-hybrid-jev-top70.json
+```
+
+The compact disclosure is stored in
+[`nfcorpus-taxonomy-summary.json`](nfcorpus-taxonomy-summary.json).
+
 ## Latency and provider usage
 
 | Mode | Median query latency | p95 query latency |
 | --- | ---: | ---: |
 | BM25 top 30 | 1.92 ms | 6.60 ms |
 | BM25 top 30 + Jev | 1,075.16 ms | 16,952.82 ms |
+| Multi-round Agentic Hybrid retrieval (cold) | 6,990.67 ms | 24,391.42 ms |
 
 The Jev quality run reported 3,896,612 input tokens, 164,103 output tokens, and
 $0.163657704 total provider cost. Of the 323 queries, 25 produced no BM25

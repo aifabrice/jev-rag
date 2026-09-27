@@ -29,14 +29,30 @@ if str(ROOT) not in sys.path:
 
 from jev_test import load_dotenv  # noqa: E402
 from local_kb import (  # noqa: E402
+    DEFAULT_AGENTIC_HYBRID_AGENTIC_WEIGHT,
+    DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT,
     DEFAULT_AGENTIC_MODEL,
     DEFAULT_LINE_SEARCH_BEAM,
     DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+    JEV_BATCH_SIZE,
     KnowledgeBase,
+    agentic_vector_rank_fusion,
     jev_passage_gate,
     jev_rerank,
     make_snippet,
     retrieve_candidates,
+)
+from taxonomy import (  # noqa: E402
+    DEFAULT_LEAF_SIZE,
+    DEFAULT_ROUTE_LEAVES,
+    DEFAULT_ROUTE_MIN_ITEMS,
+    DEFAULT_TAXONOMY_EXTRA_CANDIDATES,
+    DEFAULT_TOP_BRANCHES,
+    build_taxonomy,
+    load_taxonomy,
+    route_taxonomy,
+    save_taxonomy,
+    taxonomy_candidate_expansion,
 )
 
 
@@ -391,16 +407,98 @@ def load_or_create_query_embeddings(
     }
 
 
+def load_or_create_benchmark_taxonomy(
+    dataset_root: Path,
+    runtime_root: Path,
+    model: str,
+    corpus_vectors: Any,
+    doc_ids: list[str],
+    *,
+    top_branches: int,
+    leaf_size: int,
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            ["taxonomy-v1", model, DATASETS["nfcorpus"]["sha256"], doc_ids,
+             top_branches, leaf_size]
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    prefix = runtime_root / "taxonomy" / fingerprint
+    started = time.perf_counter()
+    cached = load_taxonomy(prefix)
+    if cached:
+        tree, centroids = cached
+        if set(tree.get("assignments") or {}) == set(doc_ids):
+            return tree, centroids, {
+                "cache_hit": True,
+                "path": str(prefix.with_suffix(".json")),
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "top_node_count": tree["top_node_count"],
+                "leaf_node_count": tree["leaf_node_count"],
+                "item_count": tree["item_count"],
+            }
+
+    records = {str(record["_id"]): record for record in jsonl(dataset_root / "corpus.jsonl")}
+    texts = [
+        "\n\n".join(
+            part
+            for part in (
+                str(records[doc_id].get("title") or ""),
+                str(records[doc_id].get("text") or "")[:2400],
+            )
+            if part.strip()
+        )
+        for doc_id in doc_ids
+    ]
+    tree, centroids = build_taxonomy(
+        corpus_vectors,
+        doc_ids,
+        texts,
+        top_branches=top_branches,
+        leaf_size=leaf_size,
+    )
+    tree.update(
+        {
+            "embedding_model": model,
+            "dataset": "nfcorpus",
+            "dataset_sha256": DATASETS["nfcorpus"]["sha256"],
+        }
+    )
+    save_taxonomy(prefix, tree, centroids)
+    return tree, centroids, {
+        "cache_hit": False,
+        "path": str(prefix.with_suffix(".json")),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        "top_node_count": tree["top_node_count"],
+        "leaf_node_count": tree["leaf_node_count"],
+        "item_count": tree["item_count"],
+    }
+
+
 def vector_rank(
-    query_vector: list[float], corpus_vectors: Any, doc_ids: list[str], limit: int
+    query_vector: list[float],
+    corpus_vectors: Any,
+    doc_ids: list[str],
+    limit: int,
+    allowed_doc_ids: set[str] | None = None,
 ) -> list[str]:
     import numpy as np
 
     query = np.asarray(query_vector, dtype=np.float32)
     query /= max(float(np.linalg.norm(query)), 1e-12)
     scores = corpus_vectors @ query
-    limit = min(max(1, limit), len(doc_ids))
-    indexes = np.argpartition(-scores, limit - 1)[:limit]
+    if allowed_doc_ids is None:
+        eligible = np.arange(len(doc_ids), dtype=np.int64)
+    else:
+        eligible = np.asarray(
+            [index for index, doc_id in enumerate(doc_ids) if doc_id in allowed_doc_ids],
+            dtype=np.int64,
+        )
+    if not len(eligible):
+        return []
+    limit = min(max(1, limit), len(eligible))
+    eligible_scores = scores[eligible]
+    indexes = eligible[np.argpartition(-eligible_scores, limit - 1)[:limit]]
     indexes = indexes[np.argsort(-scores[indexes])]
     return [doc_ids[int(index)] for index in indexes]
 
@@ -450,6 +548,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=100, help="BM25 candidate pool size")
     parser.add_argument("--use-jev", action="store_true", help="Rerank the BM25 candidate pool")
     parser.add_argument(
+        "--jev-batch-size",
+        type=int,
+        default=JEV_BATCH_SIZE,
+        help="Candidates per ordinary Jev reranking request (default: 10)",
+    )
+    parser.add_argument(
+        "--jev-candidate-max-chars",
+        type=int,
+        default=1800,
+        help="Maximum snippet characters per ordinary Jev candidate",
+    )
+    parser.add_argument(
+        "--jev-retrieval-prior-weight",
+        type=float,
+        default=0.0,
+        help=(
+            "After Jev, fuse the Jev rank with the original retrieval rank; "
+            "the Jev rank has weight 1.0 (default: disabled)"
+        ),
+    )
+    parser.add_argument(
         "--passage-gate",
         action="store_true",
         help=(
@@ -465,9 +584,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vector-top-k", type=int, default=50)
     parser.add_argument("--rrf-k", type=int, default=60)
     parser.add_argument(
+        "--taxonomy",
+        action="store_true",
+        help="Route Hybrid retrieval through a corpus-only hierarchical taxonomy",
+    )
+    parser.add_argument("--taxonomy-top-branches", type=int, default=DEFAULT_TOP_BRANCHES)
+    parser.add_argument("--taxonomy-leaf-size", type=int, default=DEFAULT_LEAF_SIZE)
+    parser.add_argument("--taxonomy-route-leaves", type=int, default=DEFAULT_ROUTE_LEAVES)
+    parser.add_argument("--taxonomy-min-items", type=int, default=DEFAULT_ROUTE_MIN_ITEMS)
+    parser.add_argument(
+        "--taxonomy-extra-candidates",
+        type=int,
+        default=DEFAULT_TAXONOMY_EXTRA_CANDIDATES,
+    )
+    parser.add_argument(
         "--agentic",
         action="store_true",
         help="Enable two-round LLM-planned local lexical retrieval before Jev",
+    )
+    parser.add_argument(
+        "--agentic-hybrid",
+        action="store_true",
+        help="Fuse multi-round Agentic BM25 retrieval with dense retrieval",
+    )
+    parser.add_argument(
+        "--agentic-weight",
+        type=float,
+        default=DEFAULT_AGENTIC_HYBRID_AGENTIC_WEIGHT,
+    )
+    parser.add_argument(
+        "--vector-weight",
+        type=float,
+        default=DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT,
     )
     parser.add_argument("--agentic-model", default=DEFAULT_AGENTIC_MODEL)
     parser.add_argument("--agentic-rounds", type=int, choices=[1, 2], default=2)
@@ -509,19 +657,48 @@ def main() -> int:
         raise SystemExit("--vector-top-k must be between 1 and 100")
     if args.rrf_k < 1:
         raise SystemExit("--rrf-k must be positive")
-    selected_modes = sum(bool(value) for value in (args.agentic, args.embedding_model, args.line_search))
+    if not 1 <= args.jev_batch_size <= 100:
+        raise SystemExit("--jev-batch-size must be between 1 and 100")
+    if not 200 <= args.jev_candidate_max_chars <= 3600:
+        raise SystemExit("--jev-candidate-max-chars must be between 200 and 3600")
+    if args.jev_retrieval_prior_weight < 0:
+        raise SystemExit("--jev-retrieval-prior-weight must be non-negative")
+    selected_modes = sum(
+        bool(value)
+        for value in (args.agentic, args.agentic_hybrid, args.line_search)
+    )
     if selected_modes > 1:
         raise SystemExit(
-            "--agentic, --embedding-model, and --line-search are separate benchmark modes"
+            "--agentic, --agentic-hybrid, and --line-search are separate benchmark modes"
         )
+    if args.agentic and args.embedding_model:
+        raise SystemExit("Use --agentic-hybrid to combine Agentic and embeddings")
+    if args.agentic_hybrid and not args.embedding_model:
+        raise SystemExit("--agentic-hybrid requires --embedding-model")
+    if args.line_search and args.embedding_model:
+        raise SystemExit("--line-search and --embedding-model are separate benchmark modes")
+    if args.agentic_weight <= 0 or args.vector_weight <= 0:
+        raise SystemExit("Agentic Hybrid fusion weights must be positive")
     if args.line_search and args.use_jev:
         raise SystemExit("--line-search already uses Jev; do not add --use-jev")
     if args.passage_gate and not args.embedding_model:
         raise SystemExit("--passage-gate requires --embedding-model")
+    if args.taxonomy and not args.embedding_model:
+        raise SystemExit("--taxonomy requires --embedding-model")
     if args.passage_gate and args.use_jev:
         raise SystemExit("--passage-gate replaces ordinary --use-jev reranking")
-    if args.passage_gate and (args.agentic or args.line_search):
+    if args.passage_gate and (args.agentic or args.agentic_hybrid or args.line_search):
         raise SystemExit("--passage-gate is only supported with hybrid embedding retrieval")
+    if args.taxonomy and (
+        args.agentic or args.agentic_hybrid or args.line_search or args.passage_gate
+    ):
+        raise SystemExit("--taxonomy is a separate hybrid benchmark mode")
+    if args.taxonomy_top_branches < 1 or args.taxonomy_leaf_size < 2:
+        raise SystemExit("taxonomy branch counts must be positive and leaf size at least 2")
+    if args.taxonomy_route_leaves < 1 or args.taxonomy_min_items < 1:
+        raise SystemExit("taxonomy routing limits must be positive")
+    if args.taxonomy_extra_candidates < 0:
+        raise SystemExit("--taxonomy-extra-candidates cannot be negative")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -534,8 +711,15 @@ def main() -> int:
     query_ids = sorted(query_id for query_id in qrels if query_id in queries)
     if args.limit_queries:
         query_ids = query_ids[: args.limit_queries]
+    evaluation_depth = args.top_k + (
+        args.taxonomy_extra_candidates if args.taxonomy else 0
+    )
     cutoffs = sorted(
-        {k for k in (1, 3, 5, 10, 30, 50, args.top_k, 100) if k <= args.top_k}
+        {
+            k
+            for k in (1, 3, 5, 10, 30, 50, args.top_k, evaluation_depth, 100)
+            if k <= evaluation_depth
+        }
     )
 
     db_name = f"{args.dataset}-{args.split}.db"
@@ -549,6 +733,9 @@ def main() -> int:
     line_search_cold_usage: dict[str, Any] | None = None
     stage_cold_usage: dict[str, Any] | None = None
     stage_cache_keys: set[str] = set()
+    taxonomy_tree: dict[str, Any] | None = None
+    taxonomy_centroids = None
+    taxonomy_index: dict[str, Any] | None = None
     try:
         index_stats = kb.index("none")
         if args.line_search or args.passage_gate:
@@ -590,6 +777,18 @@ def main() -> int:
                 item["end_line"] = int(item["end_line"])
                 item["snippet"] = make_snippet(item["body"], "")
                 documents_by_id[path_to_doc_id[item["path"]]] = item
+            if args.taxonomy:
+                taxonomy_tree, taxonomy_centroids, taxonomy_index = (
+                    load_or_create_benchmark_taxonomy(
+                        dataset_root,
+                        runtime_root,
+                        args.embedding_model,
+                        corpus_vectors,
+                        vector_doc_ids,
+                        top_branches=args.taxonomy_top_branches,
+                        leaf_size=args.taxonomy_leaf_size,
+                    )
+                )
         for number, query_id in enumerate(query_ids, 1):
             query = queries[query_id]
             started = time.perf_counter()
@@ -611,7 +810,7 @@ def main() -> int:
                 ).items():
                     if isinstance(value, (int, float)):
                         total_usage[key] = total_usage.get(key, 0.0) + float(value)
-            elif args.agentic:
+            elif args.agentic or args.agentic_hybrid:
                 candidates, retrieval_meta = retrieve_candidates(
                     kb,
                     query,
@@ -642,20 +841,101 @@ def main() -> int:
                     vector_doc_ids,
                     args.vector_top_k,
                 )
-                candidates = reciprocal_rank_fusion(
-                    candidates,
-                    dense_ids,
-                    documents_by_id,
-                    path_to_doc_id,
-                    args.top_k,
-                    args.rrf_k,
-                )
-                retrieval_meta = {
-                    "mode": "bm25+embedding+rrf",
-                    "embedding_model": args.embedding_model,
-                    "vector_top_k": args.vector_top_k,
-                    "rrf_k": args.rrf_k,
-                }
+                if args.agentic_hybrid:
+                    vector_candidates = []
+                    for dense_rank, doc_id in enumerate(dense_ids, start=1):
+                        item = dict(documents_by_id[doc_id])
+                        item["vector_rank"] = dense_rank
+                        vector_candidates.append(item)
+                    candidates = agentic_vector_rank_fusion(
+                        candidates,
+                        vector_candidates,
+                        limit=args.top_k,
+                        rrf_k=args.rrf_k,
+                        agentic_weight=args.agentic_weight,
+                        vector_weight=args.vector_weight,
+                    )
+                    retrieval_meta = {
+                        **retrieval_meta,
+                        "mode": "agentic+bm25+embedding+rrf",
+                        "embedding_model": args.embedding_model,
+                        "vector_top_k": args.vector_top_k,
+                        "rrf_k": args.rrf_k,
+                        "agentic_weight": args.agentic_weight,
+                        "vector_weight": args.vector_weight,
+                    }
+                else:
+                    candidates = reciprocal_rank_fusion(
+                        candidates,
+                        dense_ids,
+                        documents_by_id,
+                        path_to_doc_id,
+                        args.top_k,
+                        args.rrf_k,
+                    )
+                    retrieval_meta = {
+                        "mode": "bm25+embedding+rrf",
+                        "embedding_model": args.embedding_model,
+                        "vector_top_k": args.vector_top_k,
+                        "rrf_k": args.rrf_k,
+                    }
+                if args.taxonomy:
+                    allowed_doc_ids, route_meta = route_taxonomy(
+                        query_vectors_by_id[query_id],
+                        taxonomy_tree,
+                        taxonomy_centroids,
+                        route_leaves=args.taxonomy_route_leaves,
+                        min_items=args.taxonomy_min_items,
+                    )
+                    allowed_rowids = {
+                        int(documents_by_id[doc_id]["rowid"])
+                        for doc_id in allowed_doc_ids
+                        if doc_id in documents_by_id
+                    }
+                    try:
+                        routed_lexical = kb.lexical_search(
+                            query, args.top_k, allowed_rowids
+                        )
+                    except ValueError:
+                        routed_lexical = []
+                    routed_dense_ids = vector_rank(
+                        query_vectors_by_id[query_id],
+                        corpus_vectors,
+                        vector_doc_ids,
+                        args.vector_top_k,
+                        allowed_doc_ids,
+                    )
+                    routed_candidates = reciprocal_rank_fusion(
+                        routed_lexical,
+                        routed_dense_ids,
+                        documents_by_id,
+                        path_to_doc_id,
+                        args.top_k,
+                        args.rrf_k,
+                    )
+                    candidates = taxonomy_candidate_expansion(
+                        routed_candidates,
+                        candidates,
+                        id_key="path",
+                        extra_candidates=args.taxonomy_extra_candidates,
+                    )
+                    labels = taxonomy_tree.get("labels") or {}
+                    for item in candidates:
+                        doc_id = path_to_doc_id[item["path"]]
+                        memberships = taxonomy_tree["assignments"].get(doc_id, [])
+                        item["taxonomy_nodes"] = [
+                            labels.get(node_id, node_id) for node_id in memberships
+                        ]
+                        item["taxonomy_routed"] = doc_id in allowed_doc_ids
+                    retrieval_meta.update(
+                        {
+                            "mode": "taxonomy+bm25+embedding+rrf",
+                            "taxonomy": route_meta,
+                            "taxonomy_extra_candidates": args.taxonomy_extra_candidates,
+                            "routed_bm25_candidates": len(routed_lexical),
+                            "routed_vector_candidates": len(routed_dense_ids),
+                        }
+                    )
             retrieval_ranked_ids = [path_to_doc_id[item["path"]] for item in candidates]
             retrieval_metrics = metrics_for_query(
                 retrieval_ranked_ids, qrels[query_id], cutoffs
@@ -693,6 +973,10 @@ def main() -> int:
                     provider=args.provider,
                     timeout=args.timeout,
                     use_cache=not args.no_jev_cache,
+                    batch_size=args.jev_batch_size,
+                    candidate_max_chars=args.jev_candidate_max_chars,
+                    retrieval_prior_weight=args.jev_retrieval_prior_weight,
+                    rank_fusion_k=args.rrf_k,
                 )
                 for key, value in (jev_meta.get("usage") or {}).items():
                     if isinstance(value, (int, float)):
@@ -733,6 +1017,12 @@ def main() -> int:
         ],
         cutoffs,
     )
+    candidate_counts = [int(row["candidate_count"]) for row in rows]
+    candidate_pool = {
+        "min": min(candidate_counts),
+        "mean": round(sum(candidate_counts) / len(candidate_counts), 2),
+        "max": max(candidate_counts),
+    }
     result = {
         "benchmark": "BEIR",
         "dataset": args.dataset,
@@ -742,6 +1032,14 @@ def main() -> int:
             if args.line_search
             else f"bm25+embedding+rrf+unified-passage-gate:{args.provider}"
             if args.passage_gate
+            else f"taxonomy+bm25+embedding+rrf+jev:{args.provider}"
+            if args.taxonomy and args.use_jev
+            else "taxonomy+bm25+embedding+rrf"
+            if args.taxonomy
+            else f"agentic-{args.agentic_rounds}round+bm25+embedding+rrf+jev:{args.provider}"
+            if args.agentic_hybrid and args.use_jev
+            else f"agentic-{args.agentic_rounds}round+bm25+embedding+rrf"
+            if args.agentic_hybrid
             else f"agentic-lexical-{args.agentic_rounds}round+jev:{args.provider}"
             if args.agentic and args.use_jev
             else f"agentic-lexical-{args.agentic_rounds}round"
@@ -755,19 +1053,61 @@ def main() -> int:
             else "bm25"
         ),
         "top_k": args.top_k,
+        "jev_batch_size": args.jev_batch_size if args.use_jev else None,
+        "jev_candidate_max_chars": (
+            args.jev_candidate_max_chars if args.use_jev else None
+        ),
+        "jev_retrieval_prior_weight": (
+            args.jev_retrieval_prior_weight if args.use_jev else None
+        ),
         "line_search_window_size": (
             args.line_search_window_size if args.line_search else None
         ),
         "line_search_beam": args.line_search_beam if args.line_search else None,
         "vector_top_k": args.vector_top_k if args.embedding_model else None,
         "embedding_model": args.embedding_model,
-        "rrf_k": args.rrf_k if args.embedding_model or args.agentic else None,
-        "agentic_model": args.agentic_model if args.agentic else None,
-        "agentic_rounds": args.agentic_rounds if args.agentic else None,
-        "agentic_queries": args.agentic_queries if args.agentic else None,
-        "agentic_per_query_k": args.agentic_per_query_k if args.agentic else None,
-        "agentic_domain_hint": args.agentic_domain_hint if args.agentic else None,
+        "rrf_k": args.rrf_k
+        if args.embedding_model or args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_model": args.agentic_model
+        if args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_rounds": args.agentic_rounds
+        if args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_queries": args.agentic_queries
+        if args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_per_query_k": args.agentic_per_query_k
+        if args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_domain_hint": args.agentic_domain_hint
+        if args.agentic or args.agentic_hybrid
+        else None,
+        "agentic_hybrid": (
+            {
+                "agentic_weight": args.agentic_weight,
+                "vector_weight": args.vector_weight,
+                "parallel_online_branches": True,
+            }
+            if args.agentic_hybrid
+            else None
+        ),
         "passage_gate": args.passage_gate,
+        "taxonomy": (
+            {
+                **(taxonomy_index or {}),
+                "top_branches": args.taxonomy_top_branches,
+                "leaf_size": args.taxonomy_leaf_size,
+                "route_leaves": args.taxonomy_route_leaves,
+                "min_items": args.taxonomy_min_items,
+                "extra_candidates": args.taxonomy_extra_candidates,
+                "construction_uses_queries": False,
+                "construction_uses_qrels": False,
+            }
+            if args.taxonomy
+            else None
+        ),
         "passage_gate_routes": (
             {
                 route: sum(
@@ -784,6 +1124,7 @@ def main() -> int:
         "index": index_stats,
         "summary": summary,
         "retrieval_summary": retrieval_summary,
+        "candidate_pool": candidate_pool,
         "usage": total_usage,
         "embedding_index": embedding_index,
         "embedding_queries": embedding_queries,
