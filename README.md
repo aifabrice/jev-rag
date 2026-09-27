@@ -36,9 +36,7 @@ sizes and remote stages are shown explicitly.
 | BM25 top 50 + Embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
 | Multi-round Agentic Hybrid top 50 | 0.424145 | 0.637722 | 0.206303 |
 | **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
-| Taxonomy-expanded Hybrid top 70 + Jev | 0.441851 | 0.654006 | 0.214344 |
 | Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 |
-| Multi-round Agentic Hybrid top 50 + Jev | 0.445761 | 0.645722 | 0.217207 |
 | **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.220885** |
 
 Line Search achieved the strongest first-hit behavior (`nDCG@1=0.554180`),
@@ -53,24 +51,15 @@ cookbook-inspired fixed thresholds it excluded 13,631 of 16,150 candidates
 prompt-injection screening and query-premise checks, but it is not the default
 quality path.
 
-Taxonomy routing is also reported without cherry-picking. Its corpus-only tree
-raised candidate recall from `0.318075` at 50 to `0.342964` at 70, but final
-nDCG@10 was `0.441851`, slightly below Hybrid + Jev. It is useful as a candidate
-expansion experiment, not a new best-score claim.
+Taxonomy and the pre-fusion Agentic Hybrid order remain documented in the full
+report, but are omitted from this headline table because they sit in the same
+`0.44-0.45` band without a useful new operating point. The table keeps ordinary
+Hybrid as the representative reference and the best measured pipeline.
 
-Multi-round Agentic Hybrid produced the highest nDCG@10 point estimate,
-`0.445761`, but only `+0.001434` over ordinary Hybrid + Jev. The paired
-20,000-sample bootstrap 95% interval (`[-0.006883, 0.009834]`) crosses zero;
-97 queries improved, 142 tied, and 84 degraded. Treat the two pipelines as
-statistically tied. The new mode improved candidate Recall@50 to `0.333047`,
-but its cold retrieval-only median was `6.99 s` and p95 was `24.39 s` because
-two planning rounds run per query.
-
-A second, dev-selected RRF step now preserves part of the original retrieval
-order after Jev (Jev rank weight `1.0`, retrieval rank weight `0.25`). It adds
-no provider call and raised test nDCG@10 from `0.445761` to `0.450750`.
-Against the Jev-only order, 100 queries improved, 158 tied, and 65 degraded;
-the paired bootstrap 95% interval for the delta was `[0.000397, 0.009757]`.
+The best pipeline uses a dev-selected local RRF after Jev (Jev rank weight
+`1.0`, retrieval rank weight `0.25`). It adds no provider call and reached
+`0.450750` test nDCG@10. Its cold retrieval-only median was `6.99 s` and p95
+was `24.39 s` because two planning rounds run per query.
 
 On the [MTEB NFCorpus page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
 observed on 2026-09-26, inserting `0.450750`

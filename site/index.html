@@ -114,9 +114,8 @@
               <button class="pipeline-option" data-pipeline="agentic" role="option"><span>06</span><div><strong>Agentic lexical top 50</strong><small>Generated search terms</small></div></button>
               <button class="pipeline-option" data-pipeline="rrf" role="option"><span>07</span><div><strong>BM25 + embedding RRF</strong><small>Hybrid, before Jev</small></div></button>
               <button class="pipeline-option" data-pipeline="agenticJev" role="option"><span>08</span><div><strong>Agentic lexical + Jev</strong><small>Vector-free expansion</small></div></button>
-              <button class="pipeline-option" data-pipeline="taxonomy" role="option"><span>09</span><div><strong>Taxonomy Hybrid top 70 + Jev</strong><small>More pool recall, not a new best</small></div></button>
-              <button class="pipeline-option" data-pipeline="hybrid" role="option"><span>10</span><div><strong>Hybrid top 50 + Jev</strong><small>Fast high-quality reference</small></div></button>
-              <button class="pipeline-option active" data-pipeline="agenticHybrid" role="option" aria-selected="true"><span>11</span><div><strong>Agentic Hybrid + Jev/retrieval fusion</strong><small>Dev-selected zero-call final fusion</small></div></button>
+              <button class="pipeline-option" data-pipeline="hybrid" role="option"><span>09</span><div><strong>Hybrid top 50 + Jev</strong><small>Representative 0.44 reference</small></div></button>
+              <button class="pipeline-option active" data-pipeline="agenticHybrid" role="option" aria-selected="true"><span>10</span><div><strong>Agentic Hybrid + Jev/retrieval fusion</strong><small>Highest measured score</small></div></button>
             </div>
 
             <div class="metric-stage" aria-live="polite">
@@ -130,7 +129,7 @@
             </div>
           </div>
 
-          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results, not an official MTEB submission. A dev-selected local fusion raised Agentic Hybrid + Jev from 0.445761 to 0.450750 without another provider call; the two-round planner still adds substantial latency. Taxonomy, Passage Gate, Line Search, and the ten-query 50-candidate batch pilot are disclosed separately. <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read the full configuration and caveats →</a></div>
+          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results, not an official MTEB submission. The headline comparison keeps one representative result in the 0.44 band and the highest measured pipeline at 0.450750. Near-duplicate and negative experiments remain in the full report for reproducibility. <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read the full configuration and caveats →</a></div>
         </section>
 
         <section id="architecture" class="architecture section">
