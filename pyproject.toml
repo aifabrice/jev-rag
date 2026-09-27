@@ -41,9 +41,9 @@ embeddings = ["numpy>=1.24,<3"]
 benchmark = ["numpy>=1.24,<3"]
 dev = [
   "build>=1.2,<2",
-  "pytest>=8,<9",
+  "pytest>=8,<10",
   "ruff>=0.9,<1",
-  "twine>=5,<7",
+  "twine>=5,<8",
 ]
 
 [project.scripts]
