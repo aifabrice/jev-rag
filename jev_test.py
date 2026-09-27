@@ -95,7 +95,7 @@ def request_decision(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "jev-rag-smoke-test/0.3.0",
+        "User-Agent": "jev-rag-smoke-test/0.4.0",
     }
     if provider == "openrouter":
         headers["X-Title"] = "Jev RAG Smoke Test"

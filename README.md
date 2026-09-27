@@ -1,6 +1,6 @@
 # Jev RAG
 
-**Jev RAG is an open-source local knowledge search engine with BM25 + Jev by default, optional agentic lexical search, and optional embedding hybrid retrieval.**
+**Jev RAG is an open-source local knowledge search engine with four selectable pipelines: BM25 + Jev by default, agentic lexical search, embedding hybrid retrieval, and hierarchical Jev Line Search.**
 
 Use Jev RAG to search a local document folder, rerank candidate passages with
 Jev, and stream grounded answers with file citations. The default path is a
@@ -30,10 +30,16 @@ sizes and remote stages are shown explicitly.
 | BM25 top 30 | 0.305654 | 0.512697 | 0.147309 |
 | BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667 |
 | BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474 |
+| Two-level Jev Line Search (60 finalists) | 0.366280 | **0.657660** | 0.169397 |
 | Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464 |
 | BM25 top 50 + Embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977 |
 | **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** |
 | **Hybrid top 50 + Jev** | **0.444327** | **0.654583** | **0.214907** |
+
+Line Search achieved the strongest first-hit behavior (`nDCG@1=0.554180`),
+but lower multi-document ranking quality and recall than Agentic or Hybrid.
+Its full-corpus cold provider cost was $4.553288, so it is an experimental
+deep-search path rather than the default.
 
 On the [MTEB NFCorpus page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
 observed on 2026-09-26, inserting `0.444327`
@@ -44,6 +50,7 @@ configuration was evaluated on the same test set.
 
 [Full results, exact configuration, cost, caveats, and reproduction commands](benchmarks/NFCORPUS_RESULTS.md)
 · [Machine-readable Agentic summary](benchmarks/nfcorpus-agentic-summary.json)
+· [Machine-readable Line Search summary](benchmarks/nfcorpus-line-search-summary.json)
 
 ![Jev RAG local web interface](docs/assets/demo-ui.png)
 
@@ -51,14 +58,18 @@ configuration was evaluated on the same test set.
 default: local files -> SQLite BM25 ----------------------> Jev -> MiniMax
 agentic: local files -> MiniMax plans -> multi-BM25/RRF --> Jev -> MiniMax
 hybrid:  local files -> BM25 + OpenRouter embeddings/RRF -> Jev -> MiniMax
+line:    local files -> parallel Jev Choice windows -> global Choice -> MiniMax
 ```
 
 Jev RAG indexes a local folder and defaults to vector-free SQLite FTS5/BM25.
-The web UI and CLI expose three modes. Agentic mode runs two rounds of
+The web UI and CLI expose four modes. Agentic mode runs two rounds of
 model-planned local lexical searches and fuses them before Jev, without an
 embedding index. Hybrid mode fuses BM25 and embedding rankings before Jev. No
 vector database is required: the optional normalized embedding matrix is cached
-locally. The UI streams cited answers and reports each pipeline stage's latency.
+locally. Line Search partitions the full index into windows of at most 255,
+searches every window with Jev Choice + Noul, and globally re-ranks the window
+finalists with a second Choice request. The UI streams cited answers and reports
+each pipeline stage's latency.
 
 > Status: alpha. The software is usable locally, but APIs and storage schemas may change before 1.0.
 
@@ -67,6 +78,9 @@ locally. The UI streams cited answers and reports each pipeline stage's latency.
 - Vector-free BM25 + Jev remains the default; no embedding setup is required.
 - Optional two-round Agentic Search + Jev improves lexical recall without building embeddings.
 - Optional BM25 + Embedding reciprocal-rank fusion before the same Jev stage.
+- Optional two-level Jev Line Search with a structural capacity of 65,025
+  indexed passages, without BM25 or embeddings. Practical cost and latency grow
+  with corpus size.
 - No vector database or GPU; hybrid vectors are cached in `.knowledge/`.
 - Local incremental indexing for Markdown, text, HTML, JSON, CSV, YAML, DOCX, and PDF.
 - Chinese-aware lexical tokenization using CJK bigrams.
@@ -79,13 +93,12 @@ locally. The UI streams cited answers and reports each pipeline stage's latency.
 
 ## How it differs from vector RAG
 
-| | Default mode | Agentic mode | Hybrid mode | Typical vector RAG |
+| | Default mode | Agentic mode | Hybrid mode | Line Search mode |
 |---|---|---|---|---|
-| First-stage retrieval | SQLite FTS5/BM25 | Two-round planned BM25 searches + RRF | BM25 + embedding, fused with RRF | Embedding similarity |
-| Extra infrastructure | None beyond SQLite | OpenRouter planner calls; no vector index | OpenRouter embedding API; local NumPy cache | Embedding model and vector store |
-| Strongest queries | Exact terms, IDs, names | Synonyms, aliases, iterative discovery | Exact terms plus semantic paraphrases | Semantic similarity and paraphrases |
-| Second stage | Jev evidence reranking | Jev evidence reranking | Jev evidence reranking | Optional reranker |
-| Main trade-off | Can miss synonyms | More query latency and provider cost | Embedding/indexing cost and remote-data boundary | Indexing and infrastructure |
+| First stage | SQLite FTS5/BM25 | Planned multi-BM25 + RRF | BM25 + embedding RRF | Parallel Jev Choice windows |
+| Second stage | Jev evidence reranking | Jev evidence reranking | Jev evidence reranking | Global Jev Choice over finalists |
+| Vector index | No | No | Local cached matrix | No |
+| Main trade-off | Can miss synonyms | Planner latency/cost | Embedding/indexing boundary | Scores the full corpus remotely; highest cost |
 
 This is a deliberate retrieval architecture, not a claim that lexical search always beats embeddings. Measure it on your own documents and questions.
 
@@ -136,7 +149,7 @@ jev-rag serve
 
 Open <http://127.0.0.1:8765>. The server binds to localhost by default.
 Choose **BM25 + Jev** (default), **Agentic Search + Jev**, or
-**BM25 + Embedding + Jev** in the UI.
+**BM25 + Embedding + Jev**, or **Two-level Line-by-line Search** in the UI.
 Startup incrementally updates the local BM25 index. The default mode does not
 create embeddings and does not require a vector database.
 
@@ -187,6 +200,11 @@ The web application currently uses:
 - BM25 candidates: up to 30 passages
 - Hybrid mode: BM25 top 50 + embedding top 50, RRF top 50 (`rrf_k=60`)
 - Agentic mode: two planning rounds, five lexical queries per round, BM25 top 100 per query, RRF top 50
+- Line Search mode: up to 255 passages per window, four finalists per window,
+  at most 255 windows, and a final global Choice; no additional Jev reranker
+- The Line Search path extends TypeSafe's
+  [Semantic Find cookbook](https://docs.typesafe.ai/cookbooks/semantic_find)
+  with parallel window fan-out and a global reduce stage.
 - Agentic planner: `minimax/minimax-m3` through OpenRouter; plans are cached locally
 - Embedding model: `openai/text-embedding-3-large` through OpenRouter
 - Jev batch size: 10 candidates per request, with batches executed concurrently
@@ -229,6 +247,13 @@ jev-rag search 'query' --retrieval-mode hybrid
 # Agent-planned local lexical searches followed by Jev; no vector index.
 jev-rag search 'query' --retrieval-mode agentic
 
+# Search every indexed passage with parallel Jev windows, then globally rank finalists.
+jev-rag search 'query' --retrieval-mode line-search
+
+# Tune the two hierarchy levels (maximum window size is 255).
+jev-rag search 'query' --retrieval-mode line-search \
+  --line-search-window-size 255 --line-search-beam 4
+
 # Make hybrid the initial selection in the web UI.
 jev-rag serve --retrieval-mode hybrid
 
@@ -265,6 +290,10 @@ Scanned or image-only PDFs require OCR before indexing. PDF extraction prefers `
 - Default discovery indexes supported text documents; it does not upload the folder itself.
 - Hybrid mode sends passage text once for corpus embeddings and sends each query for query embedding; vectors are cached locally.
 - Agentic mode sends the query and up to eight first-round snippets to the OpenRouter planner; generated search plans are cached locally.
+- Line Search sends a bounded representation of every indexed passage to the
+  configured Jev provider in windows, then sends the window finalists once more
+  for global ranking. Narrow `--documents` and `--exclude` before using it on
+  private files.
 - Jev receives the query and candidate passage text.
 - OpenRouter receives the query and final evidence passages for answer generation.
 - The local HTTP server has no authentication. Do not expose it directly to the public internet.

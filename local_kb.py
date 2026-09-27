@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.error
 import urllib.request
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -38,7 +38,7 @@ from xml.etree import ElementTree
 from jev_test import load_dotenv, request_decision
 
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 DEFAULT_GENERATOR_MODEL = "minimax/minimax-m3"
 DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
 DEFAULT_RETRIEVAL_MODE = "bm25"
@@ -54,6 +54,11 @@ DEFAULT_AGENTIC_TOP_K = 50
 DEFAULT_AGENTIC_PER_QUERY_K = 100
 DEFAULT_AGENTIC_ROUNDS = 2
 DEFAULT_AGENTIC_QUERIES = 5
+LINE_SEARCH_MAX_CHOICES = 255
+DEFAULT_LINE_SEARCH_WINDOW_SIZE = 255
+DEFAULT_LINE_SEARCH_BEAM = 4
+DEFAULT_LINE_SEARCH_TOP_K = 50
+LINE_SEARCH_STAGE_CHAR_BUDGET = 60_000
 OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 EMBEDDING_TEXT_MAX_CHARS = 12000
@@ -440,6 +445,7 @@ class KnowledgeBase:
                 lexical_ms REAL,
                 embedding_ms REAL,
                 agentic_ms REAL,
+                line_search_ms REAL,
                 jev_ms REAL,
                 first_token_ms REAL,
                 generation_ms REAL,
@@ -469,6 +475,8 @@ class KnowledgeBase:
             self.connection.execute("ALTER TABLE answer_runs ADD COLUMN agentic_model TEXT")
         if "agentic_ms" not in columns:
             self.connection.execute("ALTER TABLE answer_runs ADD COLUMN agentic_ms REAL")
+        if "line_search_ms" not in columns:
+            self.connection.execute("ALTER TABLE answer_runs ADD COLUMN line_search_ms REAL")
         self.connection.commit()
 
     def _setting(self, key: str) -> str | None:
@@ -657,16 +665,17 @@ class KnowledgeBase:
             """
             INSERT INTO answer_runs(
                 query,generator_model,retrieval_mode,embedding_model,agentic_model,use_jev,
-                candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,jev_ms,
+                candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,line_search_ms,jev_ms,
                 first_token_ms,generation_ms,total_ms,
                 prompt_tokens,completion_tokens,cost,answer,sources_json,created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 run["query"], run["generator_model"], run.get("retrieval_mode", "bm25"),
                 run.get("embedding_model"), run.get("agentic_model"), int(run["use_jev"]),
                 run["candidate_count"], run["returned_count"], run.get("lexical_ms"),
-                run.get("embedding_ms"), run.get("agentic_ms"), run.get("jev_ms"),
+                run.get("embedding_ms"), run.get("agentic_ms"), run.get("line_search_ms"),
+                run.get("jev_ms"),
                 run.get("first_token_ms"),
                 run.get("generation_ms"),
                 run.get("total_ms"), run.get("prompt_tokens"), run.get("completion_tokens"),
@@ -681,7 +690,7 @@ class KnowledgeBase:
         rows = self.connection.execute(
             """
             SELECT id,query,generator_model,retrieval_mode,embedding_model,agentic_model,use_jev,
-                   candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,jev_ms,
+                   candidate_count,returned_count,lexical_ms,embedding_ms,agentic_ms,line_search_ms,jev_ms,
                    first_token_ms,generation_ms,total_ms,
                    prompt_tokens,completion_tokens,cost,created_at
             FROM answer_runs ORDER BY id DESC LIMIT ?
@@ -1222,7 +1231,9 @@ def agentic_retrieve(
         "lexical_ms": round(lexical_ms, 1),
         "embedding_ms": 0.0,
         "agentic_ms": round((time.perf_counter() - started) * 1000, 1),
+        "line_search_ms": 0.0,
         "embedding": None,
+        "line_search": None,
         "agentic": {
             "model": model,
             "domain_hint": domain_hint,
@@ -1236,6 +1247,314 @@ def agentic_retrieve(
             "planner_rounds": planner_rounds,
             "usage": planner_usage,
         },
+    }
+
+
+def _line_search_windows(
+    passages: list[dict[str, Any]],
+    window_size: int = DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+) -> list[dict[str, Any]]:
+    """Pack indexed passages into the two-level Choice hierarchy.
+
+    Passage order is stable and documents stay adjacent because the index is
+    materialized in rowid order. A very large document may span windows; a
+    window may contain several small documents.
+    """
+    if not 1 <= window_size <= LINE_SEARCH_MAX_CHOICES:
+        raise ValueError(
+            f"line_search_window_size 必须在 1 到 {LINE_SEARCH_MAX_CHOICES} 之间"
+        )
+    windows = []
+    for offset in range(0, len(passages), window_size):
+        items = passages[offset : offset + window_size]
+        windows.append(
+            {
+                "id": f"w{len(windows):03d}",
+                "start": offset,
+                "end": offset + len(items),
+                "items": items,
+            }
+        )
+    if len(windows) > LINE_SEARCH_MAX_CHOICES:
+        capacity = LINE_SEARCH_MAX_CHOICES * window_size
+        raise ValueError(
+            "两级 Line-by-line Search 超出容量："
+            f"当前 {len(passages):,} 个文段，配置最多支持 {capacity:,} 个。"
+            "请增大一级窗口内文段数（不超过 255）、缩小索引范围，或增加层级。"
+        )
+    return windows
+
+
+def _compact_line_search_entry(item: dict[str, Any], max_chars: int) -> str:
+    label = (
+        f"{item['path']} | {item['title']} | {item['heading']} | "
+        f"lines {item['start_line']}-{item['end_line']}"
+    )
+    remaining = max(0, max_chars - len(label) - 3)
+    body = " ".join(str(item["body"]).split())
+    if len(body) > remaining:
+        body = body[: max(0, remaining - 1)].rstrip() + "…"
+    return f"{label} | {body}" if body else label
+
+
+def _line_search_leaf_state(window: dict[str, Any]) -> tuple[str, dict[str, dict[str, Any]]]:
+    items = window["items"]
+    per_item = max(120, min(1800, LINE_SEARCH_STAGE_CHAR_BUDGET // max(1, len(items))))
+    lookup: dict[str, dict[str, Any]] = {}
+    lines = []
+    for index, item in enumerate(items):
+        leaf_id = f"l{index:03d}"
+        lookup[leaf_id] = item
+        lines.append(f"{leaf_id}| {_compact_line_search_entry(item, per_item)}")
+    return "\n".join(lines), lookup
+
+
+def _line_search_cache_key(
+    provider: str,
+    query: str,
+    stage: str,
+    items: list[dict[str, Any]],
+) -> str:
+    identity = [f"{item['rowid']}:{sha256_text(item['body'])[:12]}" for item in items]
+    return sha256_text(
+        json.dumps(
+            ["line-search-v1", provider, stage, query, identity],
+            ensure_ascii=False,
+        )
+    )
+
+
+def _line_search_questions(
+    query: str,
+    choice_ids: list[str],
+    unit_name: str,
+) -> dict[str, Any]:
+    questions: dict[str, Any] = {}
+    if len(choice_ids) > 1:
+        questions["where"] = {
+            "type": "choice",
+            "instructions": f'哪个{unit_name}最可能包含对用户问题“{query}”的直接答案或证据？',
+            "criteria": {choice_id: None for choice_id in choice_ids},
+        }
+    questions["exists"] = {
+        "type": "noul",
+        "instructions": f'这些{unit_name}中是否至少有一个直接回答或具体支持用户问题“{query}”？',
+        "criteria": {
+            "true": "至少一个候选包含可用于回答的具体事实、规则、步骤或数据。",
+            "false": "候选都无关，或只有相似主题而没有回答所需证据。",
+        },
+    }
+    return questions
+
+
+def two_level_line_search(
+    kb: KnowledgeBase,
+    query: str,
+    provider: str = "openrouter",
+    window_size: int = DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+    beam: int = DEFAULT_LINE_SEARCH_BEAM,
+    top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
+    timeout: float = 60.0,
+    use_cache: bool = True,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Search up to 255 x 255 passages with parallel fan-out and a final Choice reduce."""
+    if not 1 <= beam <= LINE_SEARCH_MAX_CHOICES:
+        raise ValueError(f"line_search_beam 必须在 1 到 {LINE_SEARCH_MAX_CHOICES} 之间")
+    if top_k < 1:
+        raise ValueError("line_search_top_k 必须大于 0")
+
+    started = time.perf_counter()
+    passages = kb.embedding_passages()
+    if not passages:
+        return [], {
+            "used": False,
+            "reason": "empty_index",
+            "elapsed_ms": 0.0,
+            "usage": {},
+            "window_count": 0,
+            "selected_windows": [],
+        }
+    windows = _line_search_windows(passages, window_size)
+    usage: dict[str, float] = {}
+    responses: list[dict[str, Any]] = []
+    cache_hits = 0
+    stage_inputs: list[tuple[dict[str, Any], str, dict[str, dict[str, Any]], str, Any]] = []
+    for window in windows:
+        state, lookup = _line_search_leaf_state(window)
+        cache_key = _line_search_cache_key(provider, query, window["id"], window["items"])
+        cached = kb.cache_get(cache_key) if use_cache else None
+        if cached:
+            cache_hits += 1
+            stage_inputs.append((window, state, lookup, cache_key, cached["response"]))
+        else:
+            stage_inputs.append((window, state, lookup, cache_key, None))
+
+    def search_window(
+        entry: tuple[dict[str, Any], str, dict[str, dict[str, Any]], str, Any]
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]], str, dict[str, Any], bool]:
+        window, state, lookup, cache_key, cached_response = entry
+        if cached_response is not None:
+            return window, lookup, cache_key, cached_response, True
+        response = request_decision(
+            provider,
+            {"query": query, "passages": state},
+            _line_search_questions(query, list(lookup), "候选文段"),
+            timeout,
+        )
+        return window, lookup, cache_key, response, False
+
+    stage_results = []
+    stage_errors: list[Exception] = []
+    with ThreadPoolExecutor(max_workers=min(4, len(stage_inputs))) as executor:
+        futures = [executor.submit(search_window, entry) for entry in stage_inputs]
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+            except Exception as exc:  # Preserve completed windows before failing the query.
+                stage_errors.append(exc)
+                continue
+            stage_results.append(result)
+            _, _, cache_key, response, was_cached = result
+            if use_cache and not was_cached:
+                kb.cache_put(cache_key, {"response": response})
+    if stage_errors:
+        raise stage_errors[0]
+    stage_results.sort(key=lambda result: result[0]["start"])
+
+    finalists: list[dict[str, Any]] = []
+    window_meta = []
+    finalists_per_window = min(beam, max(1, LINE_SEARCH_MAX_CHOICES // len(windows)))
+    for window, lookup, cache_key, response, was_cached in stage_results:
+        if not was_cached:
+            _add_numeric_usage(usage, response.get("usage") or {})
+        responses.append(response)
+        answers = response.get("answers") or {}
+        line_scores = {
+            str(key): float(value)
+            for key, value in ((answers.get("where") or {}).get("probabilities") or {}).items()
+        }
+        if len(lookup) == 1:
+            line_scores = {next(iter(lookup)): 1.0}
+        elif not line_scores:
+            line_scores = {key: 1.0 / len(lookup) for key in lookup}
+        exists = float((answers.get("exists") or {}).get("noul", 0.0))
+        ordered_lines = sorted(line_scores, key=lambda key: (-line_scores[key], key))
+        window_meta.append(
+            {
+                "id": window["id"],
+                "exists": round(exists, 6),
+                "passages": len(lookup),
+                "best_probability": round(line_scores[ordered_lines[0]], 6),
+                "cache_hit": was_cached,
+            }
+        )
+        for line_rank, leaf_id in enumerate(
+            ordered_lines[:finalists_per_window], start=1
+        ):
+            item = dict(lookup[leaf_id])
+            line_probability = line_scores[leaf_id]
+            item.update(
+                {
+                    "line_window_id": window["id"],
+                    "line_window_probability": round(exists, 8),
+                    "line_rank": line_rank,
+                    "line_probability": round(line_probability, 8),
+                    "line_exists": round(exists, 8),
+                    "snippet": make_snippet(item["body"], query),
+                }
+            )
+            finalists.append(item)
+
+    finalist_lookup: dict[str, dict[str, Any]] = {}
+    finalist_lines = []
+    per_finalist = max(
+        120, min(1800, LINE_SEARCH_STAGE_CHAR_BUDGET // max(1, len(finalists)))
+    )
+    for index, item in enumerate(finalists):
+        finalist_id = f"f{index:03d}"
+        finalist_lookup[finalist_id] = item
+        finalist_lines.append(
+            f"{finalist_id}| {_compact_line_search_entry(item, per_finalist)}"
+        )
+
+    if len(finalists) == 1:
+        final_scores = {next(iter(finalist_lookup)): 1.0}
+        final_exists = finalists[0]["line_exists"]
+    else:
+        final_key = _line_search_cache_key(provider, query, "finalists", finalists)
+        cached = kb.cache_get(final_key) if use_cache else None
+        if cached:
+            final_response = cached["response"]
+            cache_hits += 1
+        else:
+            final_response = request_decision(
+                provider,
+                {"query": query, "finalists": "\n".join(finalist_lines)},
+                _line_search_questions(query, list(finalist_lookup), "窗口优胜文段"),
+                timeout,
+            )
+            if use_cache:
+                kb.cache_put(final_key, {"response": final_response})
+            _add_numeric_usage(usage, final_response.get("usage") or {})
+        responses.append(final_response)
+        final_answers = final_response.get("answers") or {}
+        final_scores = {
+            str(key): float(value)
+            for key, value in (
+                (final_answers.get("where") or {}).get("probabilities") or {}
+            ).items()
+        }
+        if not final_scores:
+            final_scores = {
+                key: 1.0 / len(finalist_lookup) for key in finalist_lookup
+            }
+        final_exists = float((final_answers.get("exists") or {}).get("noul", 0.0))
+
+    scored: list[dict[str, Any]] = []
+    for finalist_id, item in finalist_lookup.items():
+        final_probability = final_scores.get(finalist_id, 0.0)
+        candidate = dict(item)
+        candidate["line_final_probability"] = round(final_probability, 8)
+        candidate["line_search_score"] = round(
+            final_probability
+            * candidate["line_probability"]
+            * candidate["line_exists"],
+            10,
+        )
+        scored.append(candidate)
+
+    scored.sort(
+        key=lambda item: (
+            -item["line_search_score"],
+            -item["line_final_probability"],
+            -item["line_probability"],
+            int(item["rowid"]),
+        )
+    )
+    scored = scored[:top_k]
+    for rank, item in enumerate(scored, start=1):
+        item["retrieval_rank"] = rank
+        item["final_rank"] = rank
+
+    first_response = responses[0] if responses else {}
+    return scored, {
+        "used": True,
+        "cache_hit": cache_hits == len(responses) and bool(responses),
+        "cache_hits": cache_hits,
+        "gateway": first_response.get("gateway", provider),
+        "upstream_provider": first_response.get("provider"),
+        "model": first_response.get("model"),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        "has_answer": round(final_exists, 6),
+        "window_count": len(windows),
+        "window_size": window_size,
+        "beam": beam,
+        "finalists_per_window": finalists_per_window,
+        "finalist_count": len(finalists),
+        "searched_passages": len(passages),
+        "capacity": LINE_SEARCH_MAX_CHOICES * window_size,
+        "selected_windows": window_meta,
+        "usage": usage,
     }
 
 
@@ -1253,12 +1572,38 @@ def retrieve_candidates(
     agentic_per_query_k: int = DEFAULT_AGENTIC_PER_QUERY_K,
     agentic_top_k: int = DEFAULT_AGENTIC_TOP_K,
     agentic_domain_hint: str | None = None,
+    line_search_window_size: int = DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+    line_search_beam: int = DEFAULT_LINE_SEARCH_BEAM,
+    line_search_top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
+    provider: str = "openrouter",
     rrf_k: int = DEFAULT_RRF_K,
     timeout: float = 60.0,
     use_cache: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if retrieval_mode not in {"bm25", "hybrid", "agentic"}:
-        raise ValueError("retrieval_mode 必须是 bm25、hybrid 或 agentic")
+    if retrieval_mode not in {"bm25", "hybrid", "agentic", "line-search"}:
+        raise ValueError("retrieval_mode 必须是 bm25、hybrid、agentic 或 line-search")
+
+    if retrieval_mode == "line-search":
+        candidates, line_meta = two_level_line_search(
+            kb,
+            query,
+            provider=provider,
+            window_size=line_search_window_size,
+            beam=line_search_beam,
+            top_k=line_search_top_k,
+            timeout=timeout,
+            use_cache=use_cache,
+        )
+        return candidates, {
+            "mode": "line-search",
+            "lexical_ms": 0.0,
+            "embedding_ms": 0.0,
+            "agentic_ms": 0.0,
+            "line_search_ms": line_meta["elapsed_ms"],
+            "embedding": None,
+            "agentic": None,
+            "line_search": line_meta,
+        }
 
     if retrieval_mode == "agentic":
         return agentic_retrieve(
@@ -1287,8 +1632,10 @@ def retrieve_candidates(
             "lexical_ms": lexical_ms,
             "embedding_ms": 0.0,
             "agentic_ms": 0.0,
+            "line_search_ms": 0.0,
             "embedding": None,
             "agentic": None,
+            "line_search": None,
         }
 
     hybrid_started = time.perf_counter()
@@ -1324,10 +1671,12 @@ def retrieve_candidates(
         "lexical_ms": lexical_ms,
         "embedding_ms": embedding_ms,
         "agentic_ms": 0.0,
+        "line_search_ms": 0.0,
         "bm25_candidates": len(bm25_results),
         "vector_candidates": len(vector_results),
         "embedding": {**index_meta, "usage": usage},
         "agentic": None,
+        "line_search": None,
         "rrf_k": rrf_k,
     }
 
@@ -1468,8 +1817,17 @@ def run_search(
     agentic_queries: int = DEFAULT_AGENTIC_QUERIES,
     agentic_per_query_k: int = DEFAULT_AGENTIC_PER_QUERY_K,
     agentic_top_k: int = DEFAULT_AGENTIC_TOP_K,
+    line_search_window_size: int = DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+    line_search_beam: int = DEFAULT_LINE_SEARCH_BEAM,
+    line_search_top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
     rrf_k: int = DEFAULT_RRF_K,
 ) -> dict[str, Any]:
+    if retrieval_mode == "line-search" and not use_jev:
+        raise ValueError("line-search 模式本身依赖 Jev，不能与 --no-jev 一起使用")
+    if retrieval_mode == "line-search" and threshold > 0:
+        raise ValueError(
+            "line-search 使用 Choice 概率，不适用普通 Jev rerank 的 --threshold"
+        )
     started = time.perf_counter()
     candidates, retrieval_meta = retrieve_candidates(
         kb,
@@ -1484,11 +1842,28 @@ def run_search(
         agentic_queries=agentic_queries,
         agentic_per_query_k=agentic_per_query_k,
         agentic_top_k=agentic_top_k,
+        line_search_window_size=line_search_window_size,
+        line_search_beam=line_search_beam,
+        line_search_top_k=line_search_top_k,
+        provider=provider,
         rrf_k=rrf_k,
         timeout=timeout,
         use_cache=use_cache,
     )
-    if use_jev:
+    if retrieval_mode == "line-search":
+        ranked = candidates
+        line_meta = retrieval_meta["line_search"]
+        jev_meta = {
+            "used": True,
+            "reason": "native_two_level_line_search",
+            "model": line_meta.get("model"),
+            "gateway": line_meta.get("gateway"),
+            "has_answer": line_meta.get("has_answer"),
+            "elapsed_ms": line_meta.get("elapsed_ms"),
+            "cache_hit": line_meta.get("cache_hit"),
+            "usage": {},
+        }
+    elif use_jev:
         ranked, jev_meta = jev_rerank(kb, query, candidates, provider, timeout, use_cache)
         if threshold > 0:
             ranked = [item for item in ranked if item.get("jev_score", 0) >= threshold]
@@ -1506,6 +1881,7 @@ def run_search(
             "lexical_ms": retrieval_meta["lexical_ms"],
             "embedding_ms": retrieval_meta["embedding_ms"],
             "agentic_ms": retrieval_meta["agentic_ms"],
+            "line_search_ms": retrieval_meta["line_search_ms"],
             "total_ms": round((time.perf_counter() - started) * 1000, 1),
         },
         "retrieval": retrieval_meta,
@@ -1691,9 +2067,9 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 .summary{color:var(--muted);font-size:13px}.source{padding:13px 0;border-top:1px solid var(--line)}.source:first-child{border-top:0}.source h3{font-size:15px;margin:0 0 3px}.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:12px}.score{color:var(--accent);font-weight:650}.snippet{white-space:pre-wrap;margin:8px 0 0;color:#36423d;max-height:130px;overflow:hidden}.empty{padding:42px 0;text-align:center;color:var(--muted)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.error{color:#9d2b24}
 @media(max-width:700px){main{padding:28px 16px}.search{grid-template-columns:1fr}.search button{height:48px}header{display:block}#status{text-align:left;margin-top:12px}.metrics{grid-template-columns:repeat(2,1fr)}}
 </style></head><body><main>
-<header><div><h1>Jev RAG</h1><p>默认 BM25 + Jev，可切换 Agentic 或 Embedding 混合召回。</p></div><div id="status">读取索引…</div></header>
+<header><div><h1>Jev RAG</h1><p>默认 BM25 + Jev，可切换 Agentic、Embedding 混合召回或两级 Line Search。</p></div><div id="status">读取索引…</div></header>
 <form id="form" class="search"><input id="q" autocomplete="off" placeholder="输入一个需要从本地文档回答的问题"><button id="go">提问</button></form>
-<div class="options"><label>检索模式 <select id="mode"><option value="bm25">BM25 + Jev（默认）</option><option value="agentic">Agentic Search + Jev（无向量）</option><option value="hybrid">BM25 + Embedding + Jev</option></select></label><button id="reindex" type="button">重新扫描文档</button></div>
+<div class="options"><label>检索模式 <select id="mode"><option value="bm25">BM25 + Jev（默认）</option><option value="agentic">Agentic Search + Jev（无向量）</option><option value="hybrid">BM25 + Embedding + Jev</option><option value="line-search">两级 Line-by-line Search（Jev）</option></select></label><button id="reindex" type="button">重新扫描文档</button></div>
 <div id="metrics" class="metrics" hidden></div><div id="summary" class="summary"></div>
 <section id="answerPanel" class="panel" hidden><h2>MiniMax 回答</h2><div id="answer" class="answer"></div></section>
 <section id="sourcesPanel" class="panel" hidden><h2>检索证据</h2><div id="sources"></div></section>
@@ -1702,10 +2078,10 @@ button{font:inherit;border:0;border-radius:8px;padding:0 22px;background:var(--a
 const $=s=>document.querySelector(s);const esc=s=>(s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>v===null||v===undefined?'—':`${Math.round(v)} ms`;
 let modeInitialized=false;async function status(){const r=await fetch('/api/status');const d=await r.json();if(!modeInitialized&&d.default_retrieval_mode){$('#mode').value=d.default_retrieval_mode;modeInitialized=true}$('#status').innerHTML=`${d.documents} 个文件 · ${d.passages} 条记录<br>${d.answer_runs} 次已记录问答 · <code>${esc(d.chunking)}</code><br>本地目录：<code>${esc(d.documents_root)}</code><br>默认 BM25 + Jev，不建立向量索引`};
-function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Agentic Search',m.agentic_ms],['Embedding / RRF',m.embedding_ms],['Jev',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
-function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{let ranks;if(x.agentic_rrf_score!==undefined){ranks=`<span>Agentic RRF #${x.retrieval_rank}</span><span>原始 BM25 ${x.original_bm25_rank!==undefined?'#'+x.original_bm25_rank:'—'}</span><span>最佳词检索 #${x.agentic_best_rank}</span>`}else if(x.rrf_score!==undefined){ranks=`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`}else{ranks=`<span>BM25 #${x.bm25_rank}</span>`}return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:''}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
+function showMetrics(m={}){const items=[['BM25',m.lexical_ms],['Agentic Search',m.agentic_ms],['Embedding / RRF',m.embedding_ms],['Two-level Line Search',m.line_search_ms],['Jev 重排',m.jev_ms],['端到端首 token',m.client_first_token_ms??m.first_token_ms],['MiniMax 完成',m.generation_ms],['端到端总时长',m.client_total_ms??m.total_ms]];$('#metrics').hidden=false;$('#metrics').innerHTML=items.map(([k,v])=>`<div class="metric"><b>${fmt(v)}</b><span>${k}</span></div>`).join('')}
+function showSources(xs){$('#sourcesPanel').hidden=!xs.length;$('#sources').innerHTML=xs.map((x,i)=>{let ranks;if(x.line_search_score!==undefined){ranks=`<span>Line #${x.retrieval_rank}</span><span>窗口 ${esc(x.line_window_id)} · 存在 ${(x.line_exists*100).toFixed(0)}%</span><span>段内 #${x.line_rank} · ${(x.line_probability*100).toFixed(1)}%</span><span>全局 ${(x.line_final_probability*100).toFixed(1)}%</span>`}else if(x.agentic_rrf_score!==undefined){ranks=`<span>Agentic RRF #${x.retrieval_rank}</span><span>原始 BM25 ${x.original_bm25_rank!==undefined?'#'+x.original_bm25_rank:'—'}</span><span>最佳词检索 #${x.agentic_best_rank}</span>`}else if(x.rrf_score!==undefined){ranks=`<span>RRF #${x.retrieval_rank}</span><span>BM25 ${x.bm25_rank!==undefined?'#'+x.bm25_rank:'—'}</span><span>Vector ${x.vector_rank!==undefined?'#'+x.vector_rank:'—'}</span>`}else{ranks=`<span>BM25 #${x.bm25_rank}</span>`}return `<div class="source"><h3>[${i+1}] ${esc(x.title)}</h3><div class="meta"><span>${esc(x.path)}:${x.start_line}-${x.end_line}</span>${ranks}${x.jev_score!==undefined?`<span class="score">Jev ${(x.jev_score*100).toFixed(0)}%</span>`:''}</div><div class="snippet">${esc(x.snippet)}</div></div>`}).join('')}
 $('#form').onsubmit=async e=>{e.preventDefault();const q=$('#q').value.trim();if(!q)return;const clientStart=performance.now();let firstClient=null,answer='',metrics={};$('#go').disabled=true;$('#go').textContent='回答中…';$('#empty').hidden=true;$('#answerPanel').hidden=false;$('#sourcesPanel').hidden=true;$('#answer').textContent='';$('#answer').classList.add('cursor');$('#summary').textContent='正在执行 BM25 召回…';showMetrics(metrics);
-try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,retrieval_mode:$('#mode').value,use_jev:true})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);const labels={bm25:'BM25',agentic:'Agentic Search',hybrid:'混合检索'};const mode=labels[ev.retrieval_mode]||ev.retrieval_mode;$('#summary').textContent=`记录 #${ev.run_id} · ${mode} + Jev · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
+try{const r=await fetch('/api/answer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:q,retrieval_mode:$('#mode').value,use_jev:true})});if(!r.ok){const d=await r.json();throw new Error(d.error||'问答失败')}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const ev=JSON.parse(line);if(ev.type==='stage'){Object.assign(metrics,ev.metrics);$('#summary').textContent=ev.message;showMetrics(metrics)}else if(ev.type==='sources'){showSources(ev.results)}else if(ev.type==='delta'){if(firstClient===null)firstClient=performance.now()-clientStart;answer+=ev.text;$('#answer').textContent=answer}else if(ev.type==='done'){metrics={...metrics,...ev.metrics,client_first_token_ms:firstClient,client_total_ms:performance.now()-clientStart};showMetrics(metrics);const labels={bm25:'BM25',agentic:'Agentic Search',hybrid:'混合检索','line-search':'两级 Line Search'};const mode=labels[ev.retrieval_mode]||ev.retrieval_mode;$('#summary').textContent=`记录 #${ev.run_id} · ${mode}${ev.retrieval_mode==='line-search'?'':' + Jev'} · ${ev.model} · 候选 ${ev.candidate_count} 条 · 证据 ${ev.returned_count} 条${ev.cost!=null?` · $${Number(ev.cost).toFixed(6)}`:''}`}else if(ev.type==='error'){throw new Error(ev.error)}}}}catch(e){$('#summary').innerHTML=`<span class="error">${esc(e.message)}</span>`;if(!answer)$('#answer').textContent='未能生成答案。'}finally{$('#answer').classList.remove('cursor');$('#go').disabled=false;$('#go').textContent='提问';status()}};
 $('#reindex').onclick=async()=>{const b=$('#reindex');b.disabled=true;b.textContent='扫描中…';try{const r=await fetch('/api/index',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.error);await status();b.textContent=`完成：${d.documents} 个文件`;}catch(e){b.textContent='失败：'+e.message}setTimeout(()=>{b.disabled=false;b.textContent='重新扫描文档'},2500)};status();
 </script></body></html>"""
 
@@ -1749,13 +2125,19 @@ class AppHandler(BaseHTTPRequestHandler):
         retrieval_mode = str(
             payload.get("retrieval_mode", self.config["retrieval_mode"])
         ).strip().lower()
-        if retrieval_mode not in {"bm25", "hybrid", "agentic"}:
-            raise ValueError("retrieval_mode 必须是 bm25、hybrid 或 agentic")
+        if retrieval_mode not in {"bm25", "hybrid", "agentic", "line-search"}:
+            raise ValueError("retrieval_mode 必须是 bm25、hybrid、agentic 或 line-search")
+        if retrieval_mode == "line-search" and not use_jev:
+            raise ValueError("line-search 模式本身依赖 Jev")
         top_k = int(payload.get("top_k", self.config["top_k"]))
         top_n = int(payload.get("top_n", self.config["top_n"]))
         threshold = float(payload.get("threshold", self.config["threshold"]))
         if not 0.0 <= threshold <= 1.0:
             raise ValueError("threshold 必须在 0 到 1 之间")
+        if retrieval_mode == "line-search" and threshold > 0:
+            raise ValueError(
+                "line-search 使用 Choice 概率，不适用普通 Jev rerank 的 threshold"
+            )
         pipeline_started = time.perf_counter()
 
         self.send_response(200)
@@ -1774,6 +2156,8 @@ class AppHandler(BaseHTTPRequestHandler):
                         if retrieval_mode == "hybrid"
                         else "正在执行两轮 Agentic 本地检索…"
                         if retrieval_mode == "agentic"
+                        else "正在执行两级 Jev Line-by-line Search…"
+                        if retrieval_mode == "line-search"
                         else "正在执行 BM25 召回…"
                     ),
                     "metrics": {},
@@ -1792,22 +2176,30 @@ class AppHandler(BaseHTTPRequestHandler):
                 agentic_queries=self.config["agentic_queries"],
                 agentic_per_query_k=self.config["agentic_per_query_k"],
                 agentic_top_k=self.config["agentic_top_k"],
+                line_search_window_size=self.config["line_search_window_size"],
+                line_search_beam=self.config["line_search_beam"],
+                line_search_top_k=self.config["line_search_top_k"],
+                provider=self.config["provider"],
                 rrf_k=self.config["rrf_k"],
                 timeout=self.config["timeout"],
             )
             lexical_ms = retrieval_meta["lexical_ms"]
             embedding_ms = retrieval_meta["embedding_ms"]
             agentic_ms = retrieval_meta["agentic_ms"]
+            line_search_ms = retrieval_meta["line_search_ms"]
             retrieval_label = {
                 "bm25": "BM25",
                 "hybrid": "混合检索",
                 "agentic": "Agentic Search",
+                "line-search": "两级 Line Search",
             }[retrieval_mode]
             self._stream_event(
                 {
                     "type": "stage",
                     "message": (
-                        f"{retrieval_label} 已召回 {len(candidates)} 条候选，正在进行 Jev 重排…"
+                        f"{retrieval_label} 已定位 {len(candidates)} 条候选，正在生成答案…"
+                        if retrieval_mode == "line-search"
+                        else f"{retrieval_label} 已召回 {len(candidates)} 条候选，正在进行 Jev 重排…"
                         if use_jev
                         else f"{retrieval_label} 已召回 {len(candidates)} 条候选…"
                     ),
@@ -1815,13 +2207,27 @@ class AppHandler(BaseHTTPRequestHandler):
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "line_search_ms": line_search_ms,
                     },
                 }
             )
 
             jev_ms = 0.0
             jev_meta: dict[str, Any] = {"used": False, "reason": "disabled"}
-            if use_jev and candidates:
+            if retrieval_mode == "line-search":
+                ranked = candidates
+                line_meta = retrieval_meta["line_search"]
+                jev_meta = {
+                    "used": True,
+                    "reason": "native_two_level_line_search",
+                    "model": line_meta.get("model"),
+                    "gateway": line_meta.get("gateway"),
+                    "has_answer": line_meta.get("has_answer"),
+                    "elapsed_ms": line_meta.get("elapsed_ms"),
+                    "cache_hit": line_meta.get("cache_hit"),
+                    "usage": {},
+                }
+            elif use_jev and candidates:
                 jev_started = time.perf_counter()
                 ranked, jev_meta = jev_rerank(
                     self.kb,
@@ -1847,6 +2253,9 @@ class AppHandler(BaseHTTPRequestHandler):
                         "bm25_rank", "bm25_score", "vector_rank", "vector_score",
                         "retrieval_rank", "rrf_score", "original_bm25_rank",
                         "agentic_best_rank", "agentic_rrf_score", "snippet", "final_rank",
+                        "line_window_id", "line_window_probability", "line_rank",
+                        "line_probability", "line_exists", "line_final_probability",
+                        "line_search_score",
                     )
                     if key in item
                 }
@@ -1858,11 +2267,18 @@ class AppHandler(BaseHTTPRequestHandler):
             self._stream_event(
                 {
                     "type": "stage",
-                    "message": f"Jev 重排完成{cache_note}，MiniMax 正在生成答案…" if use_jev else "检索完成，MiniMax 正在生成答案…",
+                    "message": (
+                        f"两级 Line Search 完成{cache_note}，MiniMax 正在生成答案…"
+                        if retrieval_mode == "line-search"
+                        else f"Jev 重排完成{cache_note}，MiniMax 正在生成答案…"
+                        if use_jev
+                        else "检索完成，MiniMax 正在生成答案…"
+                    ),
                     "metrics": {
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "line_search_ms": line_search_ms,
                         "jev_ms": jev_ms,
                     },
                 }
@@ -1889,6 +2305,7 @@ class AppHandler(BaseHTTPRequestHandler):
                                     "lexical_ms": lexical_ms,
                                     "embedding_ms": embedding_ms,
                                     "agentic_ms": agentic_ms,
+                                    "line_search_ms": line_search_ms,
                                     "jev_ms": jev_ms,
                                     "first_token_ms": first_pipeline_token_ms,
                                 },
@@ -1911,18 +2328,25 @@ class AppHandler(BaseHTTPRequestHandler):
             agentic_usage = (
                 (retrieval_meta.get("agentic") or {}).get("usage") or {}
             )
+            line_search_usage = (
+                (retrieval_meta.get("line_search") or {}).get("usage") or {}
+            )
             embedding_cost = embedding_usage.get("cost")
             agentic_cost = agentic_usage.get("cost")
+            line_search_cost = line_search_usage.get("cost")
             total_cost = None
             if any(
                 cost is not None
-                for cost in (generator_cost, jev_cost, embedding_cost, agentic_cost)
+                for cost in (
+                    generator_cost, jev_cost, embedding_cost, agentic_cost, line_search_cost
+                )
             ):
                 total_cost = (
                     float(generator_cost or 0)
                     + float(jev_cost or 0)
                     + float(embedding_cost or 0)
                     + float(agentic_cost or 0)
+                    + float(line_search_cost or 0)
                 )
             run = {
                 "query": query,
@@ -1940,6 +2364,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 "lexical_ms": lexical_ms,
                 "embedding_ms": embedding_ms,
                 "agentic_ms": agentic_ms,
+                "line_search_ms": line_search_ms,
                 "jev_ms": jev_ms,
                 "first_token_ms": first_pipeline_token_ms,
                 "generation_ms": generation_meta.get("generation_ms"),
@@ -1965,6 +2390,7 @@ class AppHandler(BaseHTTPRequestHandler):
                         "lexical_ms": lexical_ms,
                         "embedding_ms": embedding_ms,
                         "agentic_ms": agentic_ms,
+                        "line_search_ms": line_search_ms,
                         "jev_ms": jev_ms,
                         "first_token_ms": first_pipeline_token_ms,
                         "generation_ms": generation_meta.get("generation_ms"),
@@ -2031,6 +2457,9 @@ class AppHandler(BaseHTTPRequestHandler):
                     agentic_queries=self.config["agentic_queries"],
                     agentic_per_query_k=self.config["agentic_per_query_k"],
                     agentic_top_k=self.config["agentic_top_k"],
+                    line_search_window_size=self.config["line_search_window_size"],
+                    line_search_beam=self.config["line_search_beam"],
+                    line_search_top_k=self.config["line_search_top_k"],
                     rrf_k=self.config["rrf_k"],
                 )
                 self._json(result)
@@ -2050,6 +2479,7 @@ def print_search(result: dict[str, Any]) -> None:
         f"模式 {mode}；BM25 {result['timing']['lexical_ms']} ms，"
         f"Agentic {result['timing'].get('agentic_ms', 0)} ms，"
         f"Embedding {result['timing'].get('embedding_ms', 0)} ms，"
+        f"Line Search {result['timing'].get('line_search_ms', 0)} ms，"
         f"总计 {result['timing']['total_ms']} ms"
     )
     if result["jev"].get("used"):
@@ -2060,7 +2490,14 @@ def print_search(result: dict[str, Any]) -> None:
         )
     for item in result["results"]:
         jev = f"  Jev={item['jev_score']:.0%}" if "jev_score" in item else ""
-        if mode == "hybrid":
+        if mode == "line-search":
+            rank = (
+                f"Line#{item.get('retrieval_rank')} / {item.get('line_window_id')} "
+                f"存在 {item.get('line_exists', 0):.1%} / "
+                f"段内#{item.get('line_rank')} {item.get('line_probability', 0):.1%} / "
+                f"全局 {item.get('line_final_probability', 0):.1%}"
+            )
+        elif mode == "hybrid":
             bm25 = f"BM25 #{item['bm25_rank']}" if "bm25_rank" in item else "BM25 —"
             vector = f"Vector #{item['vector_rank']}" if "vector_rank" in item else "Vector —"
             rank = f"RRF #{item['retrieval_rank']} · {bm25} · {vector}"
@@ -2083,7 +2520,7 @@ def print_search(result: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Jev RAG：默认 BM25 → Jev，可选 Agentic 或 Embedding 混合召回"
+        description="Jev RAG：默认 BM25 → Jev，可选 Agentic、Embedding 或两级 Line Search"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {APP_VERSION}")
     parser.add_argument(
@@ -2111,7 +2548,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="BM25 候选数")
     search_parser.add_argument(
         "--retrieval-mode",
-        choices=["bm25", "agentic", "hybrid"],
+        choices=["bm25", "agentic", "hybrid", "line-search"],
         default=DEFAULT_RETRIEVAL_MODE,
         help="召回模式（默认 bm25）",
     )
@@ -2129,6 +2566,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--agentic-per-query-k", type=int, default=DEFAULT_AGENTIC_PER_QUERY_K
     )
     search_parser.add_argument("--agentic-top-k", type=int, default=DEFAULT_AGENTIC_TOP_K)
+    search_parser.add_argument(
+        "--line-search-window-size",
+        type=int,
+        default=DEFAULT_LINE_SEARCH_WINDOW_SIZE,
+        help="两级 Line Search 每个窗口最多文段数（1-255）",
+    )
+    search_parser.add_argument(
+        "--line-search-beam",
+        type=int,
+        default=DEFAULT_LINE_SEARCH_BEAM,
+        help="每个窗口进入第二级全局 Choice 的优胜文段数",
+    )
+    search_parser.add_argument(
+        "--line-search-top-k", type=int, default=DEFAULT_LINE_SEARCH_TOP_K
+    )
     search_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
     search_parser.add_argument("--top-n", type=int, default=10, help="Jev 重排后的最终证据数")
     search_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
@@ -2161,7 +2613,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     serve_parser.add_argument(
         "--retrieval-mode",
-        choices=["bm25", "agentic", "hybrid"],
+        choices=["bm25", "agentic", "hybrid", "line-search"],
         default=DEFAULT_RETRIEVAL_MODE,
     )
     serve_parser.add_argument("--hybrid-top-k", type=int, default=DEFAULT_HYBRID_TOP_K)
@@ -2178,6 +2630,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--agentic-per-query-k", type=int, default=DEFAULT_AGENTIC_PER_QUERY_K
     )
     serve_parser.add_argument("--agentic-top-k", type=int, default=DEFAULT_AGENTIC_TOP_K)
+    serve_parser.add_argument(
+        "--line-search-window-size", type=int, default=DEFAULT_LINE_SEARCH_WINDOW_SIZE
+    )
+    serve_parser.add_argument(
+        "--line-search-beam", type=int, default=DEFAULT_LINE_SEARCH_BEAM
+    )
+    serve_parser.add_argument(
+        "--line-search-top-k", type=int, default=DEFAULT_LINE_SEARCH_TOP_K
+    )
     serve_parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K)
     serve_parser.add_argument("--top-n", type=int, default=10)
     serve_parser.add_argument("--threshold", type=float, default=0.0, help="Jev 最低相关度")
@@ -2223,6 +2684,9 @@ def main() -> int:
                 agentic_queries=args.agentic_queries,
                 agentic_per_query_k=args.agentic_per_query_k,
                 agentic_top_k=args.agentic_top_k,
+                line_search_window_size=args.line_search_window_size,
+                line_search_beam=args.line_search_beam,
+                line_search_top_k=args.line_search_top_k,
                 rrf_k=args.rrf_k,
             )
             if args.as_json:
@@ -2249,6 +2713,9 @@ def main() -> int:
                 "agentic_queries": args.agentic_queries,
                 "agentic_per_query_k": args.agentic_per_query_k,
                 "agentic_top_k": args.agentic_top_k,
+                "line_search_window_size": args.line_search_window_size,
+                "line_search_beam": args.line_search_beam,
+                "line_search_top_k": args.line_search_top_k,
                 "rrf_k": args.rrf_k,
                 "top_n": args.top_n,
                 "threshold": args.threshold,
@@ -2256,8 +2723,7 @@ def main() -> int:
             }
             # A single-process local app does not need request concurrency, and
             # keeping requests on the owner thread makes SQLite access simple
-            # and deterministic. Jev calls still batch all candidate judgments
-            # into one network request.
+            # and deterministic. Remote Jev work can still fan out internally.
             server = HTTPServer((args.host, args.port), AppHandler)
             print(f"本地知识检索已启动：http://{args.host}:{args.port}")
             print("按 Ctrl+C 停止")

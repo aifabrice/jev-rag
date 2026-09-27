@@ -30,6 +30,8 @@ if str(ROOT) not in sys.path:
 from jev_test import load_dotenv  # noqa: E402
 from local_kb import (  # noqa: E402
     DEFAULT_AGENTIC_MODEL,
+    DEFAULT_LINE_SEARCH_BEAM,
+    DEFAULT_LINE_SEARCH_WINDOW_SIZE,
     KnowledgeBase,
     jev_rerank,
     make_snippet,
@@ -190,6 +192,29 @@ def aggregate(rows: list[dict[str, Any]], cutoffs: list[int]) -> dict[str, Any]:
     }
 
 
+def cached_line_search_usage(
+    kb: KnowledgeBase, cache_keys: set[str] | None = None
+) -> dict[str, Any]:
+    """Recover cold-run usage even when a benchmark resumes from stage cache."""
+    usage: dict[str, float] = {}
+    requests = 0
+    for row in kb.connection.execute("SELECT cache_key, response_json FROM rerank_cache"):
+        if cache_keys is not None and row["cache_key"] not in cache_keys:
+            continue
+        try:
+            cached = json.loads(row["response_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        response = cached.get("response") if isinstance(cached, dict) else None
+        if not isinstance(response, dict):
+            continue
+        requests += 1
+        for key, value in (response.get("usage") or {}).items():
+            if isinstance(value, (int, float)):
+                usage[key] = usage.get(key, 0.0) + float(value)
+    return {"requests": requests, "usage": usage}
+
+
 def request_embeddings(
     texts: list[str],
     model: str,
@@ -210,7 +235,7 @@ def request_embeddings(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "jev-rag-hybrid-benchmark/0.3.0",
+            "User-Agent": "jev-rag-hybrid-benchmark/0.4.0",
             "X-Title": "Jev RAG Hybrid Benchmark",
         }
         payload: dict[str, Any] = {}
@@ -443,6 +468,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--agentic-domain-hint",
         help="Optional disclosed domain hint for the planner (for NFCorpus: medical)",
     )
+    parser.add_argument(
+        "--line-search",
+        action="store_true",
+        help="Evaluate two-level Jev Line Search over the full corpus",
+    )
+    parser.add_argument(
+        "--line-search-window-size", type=int, default=DEFAULT_LINE_SEARCH_WINDOW_SIZE
+    )
+    parser.add_argument("--line-search-beam", type=int, default=DEFAULT_LINE_SEARCH_BEAM)
     parser.add_argument("--limit-queries", type=int, help="Deterministic prefix for a pilot run")
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
@@ -466,8 +500,13 @@ def main() -> int:
         raise SystemExit("--vector-top-k must be between 1 and 100")
     if args.rrf_k < 1:
         raise SystemExit("--rrf-k must be positive")
-    if args.agentic and args.embedding_model:
-        raise SystemExit("--agentic and --embedding-model are separate benchmark modes")
+    selected_modes = sum(bool(value) for value in (args.agentic, args.embedding_model, args.line_search))
+    if selected_modes > 1:
+        raise SystemExit(
+            "--agentic, --embedding-model, and --line-search are separate benchmark modes"
+        )
+    if args.line_search and args.use_jev:
+        raise SystemExit("--line-search already uses Jev; do not add --use-jev")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -480,7 +519,9 @@ def main() -> int:
     query_ids = sorted(query_id for query_id in qrels if query_id in queries)
     if args.limit_queries:
         query_ids = query_ids[: args.limit_queries]
-    cutoffs = sorted({k for k in (1, 3, 5, 10, 30, args.top_k, 100) if k <= args.top_k})
+    cutoffs = sorted(
+        {k for k in (1, 3, 5, 10, 30, 50, args.top_k, 100) if k <= args.top_k}
+    )
 
     db_name = f"{args.dataset}-{args.split}.db"
     kb = KnowledgeBase(runtime_root / db_name, documents, [])
@@ -490,8 +531,18 @@ def main() -> int:
     embedding_index: dict[str, Any] | None = None
     embedding_queries: dict[str, Any] | None = None
     agentic_usage: dict[str, float] = {}
+    line_search_cold_usage: dict[str, Any] | None = None
+    line_search_cache_keys: set[str] = set()
     try:
         index_stats = kb.index("none")
+        if args.line_search:
+            original_cache_get = kb.cache_get
+
+            def tracking_cache_get(cache_key: str) -> dict[str, Any] | None:
+                line_search_cache_keys.add(cache_key)
+                return original_cache_get(cache_key)
+
+            kb.cache_get = tracking_cache_get  # type: ignore[method-assign]
         corpus_vectors = None
         vector_doc_ids: list[str] = []
         documents_by_id: dict[str, dict[str, Any]] = {}
@@ -527,7 +578,24 @@ def main() -> int:
             query = queries[query_id]
             started = time.perf_counter()
             retrieval_meta: dict[str, Any]
-            if args.agentic:
+            if args.line_search:
+                candidates, retrieval_meta = retrieve_candidates(
+                    kb,
+                    query,
+                    retrieval_mode="line-search",
+                    line_search_window_size=args.line_search_window_size,
+                    line_search_beam=args.line_search_beam,
+                    line_search_top_k=args.top_k,
+                    provider=args.provider,
+                    timeout=args.timeout,
+                    use_cache=not args.no_jev_cache,
+                )
+                for key, value in (
+                    (retrieval_meta.get("line_search") or {}).get("usage") or {}
+                ).items():
+                    if isinstance(value, (int, float)):
+                        total_usage[key] = total_usage.get(key, 0.0) + float(value)
+            elif args.agentic:
                 candidates, retrieval_meta = retrieve_candidates(
                     kb,
                     query,
@@ -577,8 +645,16 @@ def main() -> int:
                 retrieval_ranked_ids, qrels[query_id], cutoffs
             )
             retrieval_latency_ms = round((time.perf_counter() - started) * 1000, 2)
-            jev_meta: dict[str, Any] = {"used": False}
-            if args.use_jev:
+            jev_meta: dict[str, Any] = (
+                {
+                    "used": True,
+                    "reason": "native_two_level_line_search",
+                    **(retrieval_meta.get("line_search") or {}),
+                }
+                if args.line_search
+                else {"used": False}
+            )
+            if args.use_jev and not args.line_search:
                 candidates, jev_meta = jev_rerank(
                     kb,
                     query,
@@ -608,6 +684,10 @@ def main() -> int:
             )
             if number % 25 == 0 or number == len(query_ids):
                 print(f"Evaluated {number}/{len(query_ids)} queries", file=sys.stderr)
+        if args.line_search:
+            line_search_cold_usage = cached_line_search_usage(
+                kb, line_search_cache_keys
+            )
     finally:
         kb.close()
 
@@ -624,7 +704,9 @@ def main() -> int:
         "dataset": args.dataset,
         "split": args.split,
         "mode": (
-            f"agentic-lexical-{args.agentic_rounds}round+jev:{args.provider}"
+            f"two-level-line-search:{args.provider}"
+            if args.line_search
+            else f"agentic-lexical-{args.agentic_rounds}round+jev:{args.provider}"
             if args.agentic and args.use_jev
             else f"agentic-lexical-{args.agentic_rounds}round"
             if args.agentic
@@ -637,6 +719,10 @@ def main() -> int:
             else "bm25"
         ),
         "top_k": args.top_k,
+        "line_search_window_size": (
+            args.line_search_window_size if args.line_search else None
+        ),
+        "line_search_beam": args.line_search_beam if args.line_search else None,
         "vector_top_k": args.vector_top_k if args.embedding_model else None,
         "embedding_model": args.embedding_model,
         "rrf_k": args.rrf_k if args.embedding_model or args.agentic else None,
@@ -655,6 +741,7 @@ def main() -> int:
         "embedding_queries": embedding_queries,
         "embedding_usage": embedding_usage,
         "agentic_usage": agentic_usage,
+        "line_search_cold_usage": line_search_cold_usage,
         "results": rows,
     }
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"

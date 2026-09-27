@@ -1,8 +1,9 @@
 # Architecture
 
-Jev RAG keeps a vector-free default while exposing optional agentic lexical and
-hybrid embedding retrieval paths. All three paths use the same remote
-decision-model reranker and optional answer generator.
+Jev RAG keeps a vector-free default while exposing optional agentic lexical,
+hybrid embedding, and hierarchical Jev Line Search paths. BM25, Agentic, and
+hybrid retrieval share the same decision-model reranker. Line Search uses Jev
+Choice + Noul as retrieval itself.
 
 ```text
 documents
@@ -24,6 +25,18 @@ optional hybrid: BM25 top 50 + embedding top 50 -> RRF top 50 -------+
                                                     |
                                                     v
                                   OpenRouter chat completion with citations
+
+alternative line-search path:
+
+all indexed passages -> windows of <=255 -> parallel Jev Choice + Noul
+                                             |
+                                  up to 4 finalists per window
+                                             |
+                                             v
+                              global Jev Choice + Noul (<=255)
+                                             |
+                                             v
+                                  OpenRouter answer with citations
 ```
 
 ## Components
@@ -70,6 +83,29 @@ Each candidate receives a `Noul` question asking whether it contains concrete ev
 
 The full reranking result is cached by provider, query, passage identity, and batching-policy version. A threshold may remove weak evidence after scoring.
 
+### Optional two-level Line Search
+
+With `retrieval_mode=line-search`, every indexed passage participates in Jev
+retrieval through a bounded passage representation. Passages are partitioned
+into at most 255 stable windows containing
+at most 255 passages each. Every window runs a `Choice` question to rank its
+passages and a `Noul` question to decide whether it contains an answer. Windows
+run concurrently. By default, the best four passages from every window advance;
+that count is reduced automatically when needed so the second-level Choice
+never exceeds 255 options. A final Choice + Noul request globally ranks the
+finalists.
+
+The hierarchy has a structural capacity of 65,025 passages; this is not a
+practical latency or cost guarantee. Cost grows with the whole corpus because a
+bounded representation of every passage is sent to the configured Jev provider.
+Stage responses are cached by provider, query, passage identity, and hierarchy
+version.
+
+The implementation follows the TypeSafe
+[Semantic Find / line-by-line search cookbook](https://docs.typesafe.ai/cookbooks/semantic_find),
+then adds the parallel fan-out and global-reduce level needed for larger local
+corpora.
+
 ### Answer generation
 
 The answer model receives only the selected evidence, file paths, headings, and line ranges. The system prompt requires numbered citations and an explicit insufficient-evidence response. Generation uses OpenRouter's streaming chat-completions endpoint.
@@ -96,6 +132,7 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 | Query and BM25 candidate excerpts | Sent to the configured Jev provider |
 | Passage text and query (hybrid only) | Sent to the configured OpenRouter embedding model |
 | Query and first-round snippets (agentic only) | Sent to the configured OpenRouter planner |
+| Query and a bounded representation of every indexed passage (line-search only) | Sent to the configured Jev provider in windows; finalists are sent again |
 | Query and selected evidence | Sent to OpenRouter for answer generation |
 | API keys | Process environment or local `.env` |
 
@@ -105,6 +142,8 @@ The schema is internal until version 1.0. Rebuild the index if an incompatible d
 - Hybrid retrieval improves semantic recall but adds an embedding cost, a first-run indexing delay, and another remote-data boundary.
 - Agentic retrieval improves lexical recall without embeddings, but adds planner calls, query latency, provider cost, and a remote-data boundary.
 - Jev improves evidence selection but adds network latency, cost, and a remote-data boundary.
+- Line Search avoids lexical and embedding retrieval, but evaluates the full
+  corpus remotely and is substantially more expensive than shortlist reranking.
 - Batching reduces context-limit failures; scores from separate batches may not be perfectly comparable.
 - Passing more evidence can improve recall while increasing answer latency, cost, and distraction.
 - The built-in HTTP server is intentionally local and single-process. It is not a production web server.
