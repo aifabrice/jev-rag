@@ -107,9 +107,13 @@ def main() -> int:
                     findings.append(f"{relative}:{line_number}: {label}")
 
     if findings:
-        print("Release safety check failed:", file=sys.stderr)
-        for finding in findings:
-            print(f"- {finding}", file=sys.stderr)
+        print(
+            "Release safety check failed "
+            f"({len(findings)} potential issue(s) detected). "
+            "Details are intentionally omitted so CI logs cannot expose "
+            "secret-derived data.",
+            file=sys.stderr,
+        )
         return 1
     print(f"Release safety check passed ({len(files)} publishable files scanned).")
     return 0
