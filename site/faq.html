@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev RAG FAQ — Vector-free RAG, BM25, reranking, privacy and benchmarks</title>
+    <meta name="description" content="Evidence-backed answers about Jev RAG: how BM25 and Jev reranking work, whether a vector database or chunking is required, privacy boundaries, and benchmark limitations." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/faq.html" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/faq.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/" />
+    <meta property="og:title" content="Jev RAG FAQ" />
+    <meta property="og:description" content="Direct, sourced answers about vector-free retrieval, Jev reranking, agentic lexical search, privacy and evaluation." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/faq.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "name": "Jev RAG frequently asked questions",
+        "url": "https://aifabrice.github.io/jev-rag/faq.html",
+        "dateModified": "2026-09-27",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Jev RAG?",
+            "acceptedAnswer": {"@type": "Answer", "text": "Jev RAG is an open-source local-first knowledge search application. It uses SQLite FTS5/BM25 for retrieval, Jev for evidence reranking, and MiniMax for cited answers. Its default pipeline does not require embeddings or a vector database."}
+          },
+          {
+            "@type": "Question",
+            "name": "Can Jev RAG work without a vector database?",
+            "acceptedAnswer": {"@type": "Answer", "text": "Yes. The default pipeline and agentic lexical pipeline use local BM25 retrieval and do not create an embedding index. The optional hybrid mode uses embeddings but stores a normalized matrix locally rather than requiring a vector database."}
+          },
+          {
+            "@type": "Question",
+            "name": "Is Jev RAG fully offline?",
+            "acceptedAnswer": {"@type": "Answer", "text": "No. Indexing and BM25 retrieval are local, but selected passages are sent to Jev for reranking and to MiniMax for answer generation. Hybrid mode also sends text to an embedding provider."}
+          },
+          {
+            "@type": "Question",
+            "name": "Does Jev RAG require document chunking?",
+            "acceptedAnswer": {"@type": "Answer", "text": "Not always. Short files can be indexed whole, while large files usually benefit from heading-aware passages for better retrieval, context use, and citation precision. Jev RAG supports auto, none, and paragraph chunking modes."}
+          },
+          {
+            "@type": "Question",
+            "name": "What is agentic lexical search in Jev RAG?",
+            "acceptedAnswer": {"@type": "Answer", "text": "MiniMax generates multiple lexical search formulations over two rounds. Jev RAG executes those searches against local SQLite FTS5 and fuses the rankings with reciprocal rank fusion before Jev reranks the evidence. It widens lexical recall without building embeddings."}
+          },
+          {
+            "@type": "Question",
+            "name": "How was Jev RAG benchmarked?",
+            "acceptedAnswer": {"@type": "Answer", "text": "The project evaluates the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. Its best recorded hybrid run scored 0.444327 nDCG@10. These are project-run results, not an official MTEB submission."}
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="./">Home</a><a href="./#benchmark">Benchmark</a><a href="zh/" lang="zh-CN">中文</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG</a> / FAQ</p>
+        <p class="eyebrow"><span></span> Evidence-backed answers</p>
+        <h1>Jev RAG,<br /><em>without the ambiguity.</em></h1>
+        <p class="lede">Direct answers for developers comparing BM25, agentic search, embeddings, rerankers, and local knowledge-base architectures. Claims link back to source code or reproducible results.</p>
+
+        <section class="question-list" aria-label="Frequently asked questions">
+          <article class="question-card">
+            <h2>What is Jev RAG?</h2>
+            <p><strong>Jev RAG is an open-source, local-first knowledge search application.</strong> It indexes files into SQLite FTS5, retrieves candidate passages with BM25, uses the Jev model to rerank evidence, and asks MiniMax to stream a cited answer. The default pipeline is vector-free.</p>
+            <p><a class="text-link" href="https://github.com/aifabrice/jev-rag#readme">See the source and quick start →</a></p>
+          </article>
+
+          <article class="question-card">
+            <h2>Can I build RAG without a vector database?</h2>
+            <p>Yes. Jev RAG's default mode uses SQLite FTS5/BM25 for the first stage and Jev for reranking. Its agentic lexical mode creates multiple search formulations and fuses local BM25 results, also without an embedding index. The optional hybrid mode adds embeddings when semantic recall is worth the trade-off, but still does not require a vector database.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>Is Jev a retriever or a reranker here?</h2>
+            <p>Jev is the second-stage evidence reranker. BM25, agentic lexical search, or the optional hybrid path must first retrieve a bounded candidate set. Jev can reorder and filter candidates; it cannot recover a document that the first stage omitted.</p>
+            <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/docs/ARCHITECTURE.md">Inspect the architecture →</a></p>
+          </article>
+
+          <article class="question-card">
+            <h2>Does Jev RAG require document chunking?</h2>
+            <p>Not for every file. Short, focused files can stay whole. Large files usually benefit from heading-aware passages because retrieval and reranking operate on a bounded context and citations become more precise. The indexer exposes <code>auto</code>, <code>none</code>, and <code>paragraph</code> modes so the choice can be measured rather than assumed.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>What is agentic lexical search?</h2>
+            <p>MiniMax proposes several lexical queries across two planning rounds. Jev RAG runs them against local SQLite FTS5 and combines their rankings with reciprocal rank fusion before Jev reranks the evidence. This can recover aliases and reformulations while avoiding a persistent embedding index.</p>
+            <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/docs/AGENTIC_LEXICAL_SEARCH_ZH.md">Read the Chinese technical article →</a></p>
+          </article>
+
+          <article class="question-card">
+            <h2>Is Jev RAG fully offline or private?</h2>
+            <p><strong>It is local-first, not fully offline.</strong> Documents, the SQLite index, BM25 retrieval, and caches remain local. Selected passages go to Jev for reranking and selected evidence goes to MiniMax for generation. Agentic mode also calls MiniMax for search planning; hybrid mode sends text to an embedding provider. Exclude sensitive folders and review this boundary before use.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>How was the project benchmarked?</h2>
+            <p>The checked-in benchmark uses the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. BM25 top 30 recorded 0.305654 nDCG@10; BM25 top 30 plus Jev recorded 0.353235; agentic lexical top 50 plus Jev recorded 0.430969; the optional hybrid top 50 plus Jev recorded 0.444327.</p>
+            <p class="source-note"><strong>Important:</strong> these are project-run results with disclosed candidate depths. They are not an official MTEB submission and do not show that lexical retrieval always beats embeddings.</p>
+            <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Read configuration, cost, caveats, and reproduction commands →</a></p>
+          </article>
+
+          <article class="question-card">
+            <h2>When should I choose BM25, agentic lexical, or hybrid?</h2>
+            <table>
+              <thead><tr><th>Mode</th><th>Good fit</th><th>Main cost</th></tr></thead>
+              <tbody>
+                <tr><td><strong>BM25 + Jev</strong></td><td>Exact terms, IDs, product names, transparent retrieval</td><td>Can miss synonyms and paraphrases</td></tr>
+                <tr><td><strong>Agentic lexical + Jev</strong></td><td>Aliases and query reformulation without an embedding index</td><td>Planner calls add latency and provider cost</td></tr>
+                <tr><td><strong>Hybrid + Jev</strong></td><td>Exact matching plus semantic paraphrase recall</td><td>Embedding cost and a wider remote-data boundary</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="question-card">
+            <h2>Who should try Jev RAG?</h2>
+            <p>Developers who want a small local knowledge-base prototype, a BM25-plus-reranker architecture, cited answers over a folder, a vector-free baseline, or a reproducible Jev evaluation. It is alpha software, not a hosted multi-user product; test it on representative documents and questions before relying on it.</p>
+          </article>
+        </section>
+
+        <section>
+          <p class="kicker">Canonical sources</p>
+          <h2>Verify every claim.</h2>
+          <p><a class="text-link" href="https://github.com/aifabrice/jev-rag">Source repository</a> · <a class="text-link" href="https://github.com/aifabrice/jev-rag/releases">Releases</a> · <a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Benchmark report</a> · <a class="text-link" href="llms.txt">Machine-readable summary</a></p>
+          <p>Last reviewed: 2026-09-27.</p>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent community project.</span><span>MIT licensed · Python · Open source</span></footer>
+    </div>
+  </body>
+</html>

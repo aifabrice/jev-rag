@@ -1,6 +1,8 @@
 # Jev RAG
 
-**默认使用 BM25 + Jev，也可切换无向量 Agentic Search 或 Embedding 混合检索。**
+**Jev RAG 是一个开源的本地知识库检索工具：默认使用 BM25 + Jev，也可切换无向量 Agentic Search 或 Embedding 混合检索。**
+
+它可以搜索本地文件夹，用 Jev 对候选文段重排，再由回答模型输出带文件引用的答案。默认路径不需要 Embedding 或向量数据库。准确地说，Jev RAG 是“本地优先”而不是“完全离线”：选中的候选文段会发送给配置的 Jev 与回答模型服务。
 
 [![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
@@ -9,7 +11,10 @@
 
 [English](README.md) · [中文技术文章](docs/CONTENT_SERIES_ZH.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
 
-**[打开互动式公开 Benchmark →](https://aifabrice.github.io/jev-rag/)**
+**[中文项目介绍 →](https://aifabrice.github.io/jev-rag/zh/)**
+· [互动式公开 Benchmark](https://aifabrice.github.io/jev-rag/)
+· [常见问题](https://aifabrice.github.io/jev-rag/faq.html)
+· [机器可读项目说明](https://aifabrice.github.io/jev-rag/llms.txt)
 
 ## 公开测评结果
 

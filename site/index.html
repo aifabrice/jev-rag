@@ -4,26 +4,75 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jev RAG — Local retrieval without a vector database</title>
-    <meta name="description" content="Explore reproducible BEIR NFCorpus results for BM25, agentic lexical retrieval, Jev reranking, and an optional embedding hybrid pipeline." />
+    <meta name="description" content="Jev RAG is an open-source local knowledge search engine: SQLite BM25 retrieval, optional agentic lexical search, Jev reranking, and cited answers—without requiring a vector database." />
+    <meta name="author" content="aifabrice" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/" />
+    <link rel="alternate" hreflang="x-default" href="https://aifabrice.github.io/jev-rag/" />
     <meta property="og:title" content="Jev RAG — Local retrieval, measured" />
     <meta property="og:description" content="A local-first RAG experiment with vector-free defaults and reproducible retrieval benchmarks." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/" />
+    <meta property="og:site_name" content="Jev RAG" />
     <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Jev RAG — Local retrieval without a vector database" />
+    <meta name="twitter:description" content="Open-source local knowledge search with BM25, agentic lexical retrieval, Jev reranking, and cited answers." />
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2310201d'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='40' fill='white' font-family='monospace'%3EJ%3C/text%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"SoftwareSourceCode","name":"Jev RAG","codeRepository":"https://github.com/aifabrice/jev-rag","license":"https://opensource.org/license/mit","programmingLanguage":"Python","description":"Local knowledge search with BM25, agentic lexical retrieval, Jev reranking, and grounded answers."}
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://aifabrice.github.io/jev-rag/#website",
+            "url": "https://aifabrice.github.io/jev-rag/",
+            "name": "Jev RAG",
+            "description": "Official website for the open-source Jev RAG project.",
+            "inLanguage": ["en", "zh-CN"]
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://aifabrice.github.io/jev-rag/#software",
+            "name": "Jev RAG",
+            "alternateName": ["Jev-RAG", "vector-free RAG with Jev"],
+            "url": "https://aifabrice.github.io/jev-rag/",
+            "codeRepository": "https://github.com/aifabrice/jev-rag",
+            "downloadUrl": "https://github.com/aifabrice/jev-rag/releases",
+            "license": "https://opensource.org/license/mit",
+            "programmingLanguage": "Python",
+            "runtimePlatform": "Python 3.9+",
+            "applicationCategory": "DeveloperApplication",
+            "isAccessibleForFree": true,
+            "description": "Jev RAG is an open-source local knowledge search engine that uses SQLite FTS5/BM25 for first-stage retrieval, Jev for evidence reranking, and MiniMax for cited answers. Agentic lexical and embedding-hybrid retrieval are optional.",
+            "featureList": [
+              "Local document indexing",
+              "Vector-free SQLite FTS5/BM25 retrieval by default",
+              "Jev evidence reranking",
+              "Optional agentic lexical search without an embedding index",
+              "Optional embedding hybrid retrieval",
+              "Streaming answers with file citations",
+              "Reproducible BEIR NFCorpus benchmark"
+            ],
+            "sameAs": ["https://github.com/aifabrice/jev-rag"],
+            "mainEntityOfPage": {"@id": "https://aifabrice.github.io/jev-rag/#website"}
+          }
+        ]
+      }
     </script>
   </head>
   <body>
     <div class="page-shell">
       <header class="nav" aria-label="Primary navigation">
         <a class="brand" href="#top" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
-        <nav><a href="#benchmark">Benchmark</a><a href="#architecture">Architecture</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+        <nav><a href="#benchmark">Benchmark</a><a href="#architecture">Architecture</a><a href="faq.html">FAQ</a><a href="zh/" lang="zh-CN">中文</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
       </header>
 
       <main id="top">
@@ -101,13 +150,25 @@
           </div>
         </section>
 
+        <section class="answer-block section" aria-labelledby="what-is-jev-rag">
+          <div>
+            <p class="kicker">Direct answer</p>
+            <h2 id="what-is-jev-rag">What is Jev RAG?</h2>
+          </div>
+          <div class="answer-copy">
+            <p><strong>Jev RAG is an open-source, local-first knowledge search application.</strong> It indexes files into SQLite FTS5, retrieves passages with BM25, uses the Jev model to rerank evidence, and asks MiniMax to produce a cited answer. Its default path does not require embeddings or a vector database.</p>
+            <p>Use it when exact terms, product names, IDs, and inspectable local retrieval matter. Turn on agentic lexical search when queries need aliases or reformulation. Use the optional hybrid mode when semantic paraphrases justify embedding cost and a wider remote-data boundary.</p>
+            <div class="fact-links"><a href="faq.html">Read the evidence-backed FAQ →</a><a href="llms.txt">Machine-readable project facts →</a></div>
+          </div>
+        </section>
+
         <section class="cta section">
           <p class="kicker">Try it on your own corpus</p><h2>A benchmark is a starting point.<br />Your documents are the real test.</h2>
           <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run locally</a><a class="button secondary" href="https://github.com/aifabrice/jev-rag/discussions">Join the discussion</a></div>
         </section>
       </main>
 
-      <footer><span>Jev RAG is an independent community project.</span><span>Not affiliated with TypeSafe AI, OpenRouter, or MiniMax.</span></footer>
+      <footer><span>Jev RAG is an independent community project. Updated 2026-09-27.</span><span>Not affiliated with TypeSafe AI, OpenRouter, or MiniMax.</span></footer>
     </div>
     <script src="app.js"></script>
   </body>

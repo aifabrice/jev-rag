@@ -1,15 +1,23 @@
 # Jev RAG
 
-**Local knowledge search with BM25 + Jev by default, optional agentic lexical search, and optional embedding hybrid retrieval.**
+**Jev RAG is an open-source local knowledge search engine with BM25 + Jev by default, optional agentic lexical search, and optional embedding hybrid retrieval.**
+
+Use Jev RAG to search a local document folder, rerank candidate passages with
+Jev, and stream grounded answers with file citations. The default path is a
+vector-free RAG architecture: it requires neither embeddings nor a vector
+database. Jev RAG is local-first rather than fully offline because selected
+passages are sent to the configured Jev and answer-model providers.
 
 [![CI](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/aifabrice/jev-rag/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/aifabrice/jev-rag?include_prereleases)](https://github.com/aifabrice/jev-rag/releases)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [AI search discoverability](docs/AI_DISCOVERABILITY.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
-**[Explore the interactive public benchmark →](https://aifabrice.github.io/jev-rag/)**
+**[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
+· [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)
+· [Machine-readable project facts](https://aifabrice.github.io/jev-rag/llms.txt)
 
 ## Public benchmark
 
