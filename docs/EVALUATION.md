@@ -158,6 +158,28 @@ ranking to calculate metrics; they are never included in planner prompts. The
 `medical` domain hint is disclosed because NFCorpus is a medical collection;
 the application default is domain-neutral.
 
+## Evaluate two-level Line Search
+
+Line Search evaluates the complete corpus with Jev rather than retrieving a
+BM25 or embedding shortlist. It is much more expensive, so run a deterministic
+pilot first:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 100 \
+  --line-search \
+  --line-search-window-size 255 \
+  --line-search-beam 4 \
+  --provider openrouter \
+  --limit-queries 10 \
+  --output .knowledge/public-benchmarks/results/nfcorpus-line-search-pilot.json
+```
+
+Remove `--limit-queries 10` for the full run. Stage responses are cached, and
+the runner records exact cold-cache request usage even when a run is resumed.
+Do not add `--use-jev`: Line Search already uses Jev Choice + Noul as retrieval.
+
 ## Interpreting results
 
 - **Hit rate** answers whether at least one expected file appeared in the returned evidence.

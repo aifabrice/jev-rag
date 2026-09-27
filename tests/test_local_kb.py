@@ -11,7 +11,9 @@ from local_kb import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_RETRIEVAL_MODE,
     KnowledgeBase,
+    LINE_SEARCH_MAX_CHOICES,
     _parse_agentic_queries,
+    _line_search_windows,
     agentic_rank_fusion,
     agentic_retrieve,
     answer_messages,
@@ -24,6 +26,7 @@ from local_kb import (
     openrouter_error_message,
     reciprocal_rank_fusion,
     split_passages,
+    two_level_line_search,
 )
 
 
@@ -90,6 +93,11 @@ class PassageTests(unittest.TestCase):
         self.assertEqual(args.retrieval_mode, "bm25")
         self.assertEqual(args.embedding_model, DEFAULT_EMBEDDING_MODEL)
 
+    def test_line_search_is_available_without_becoming_default(self):
+        args = build_parser().parse_args(["search", "query", "--retrieval-mode", "line-search"])
+        self.assertEqual(args.retrieval_mode, "line-search")
+        self.assertEqual(DEFAULT_RETRIEVAL_MODE, "bm25")
+
     def test_default_document_root_prefers_documents_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
@@ -114,6 +122,68 @@ class PassageTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_two_level_line_search_selects_windows_then_passages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "docs"
+            root.mkdir()
+            for index in range(6):
+                (root / f"doc-{index}.md").write_text(
+                    f"Document {index} evidence", encoding="utf-8"
+                )
+            kb = KnowledgeBase(Path(tmp) / "kb.db", root)
+            kb.index("none")
+            calls = []
+
+            def fake_decision(provider, state, questions, timeout):
+                del timeout
+                calls.append((state, questions))
+                if "finalists" in state:
+                    probabilities = {"f000": 0.05, "f001": 0.05, "f002": 0.85, "f003": 0.05}
+                else:
+                    probabilities = {"l000": 0.1, "l001": 0.8, "l002": 0.1}
+                return {
+                    "gateway": provider,
+                    "provider": "test",
+                    "model": "jev-test",
+                    "answers": {
+                        "where": {
+                            "type": "choice",
+                            "choice": max(probabilities, key=probabilities.get),
+                            "probabilities": probabilities,
+                        },
+                        "exists": {"type": "noul", "noul": 0.9},
+                    },
+                    "usage": {"input_tokens": 10, "output_tokens": 2, "cost": 0.001},
+                }
+
+            try:
+                with patch("local_kb.request_decision", side_effect=fake_decision):
+                    ranked, meta = two_level_line_search(
+                        kb,
+                        "evidence",
+                        window_size=3,
+                        beam=2,
+                        top_k=6,
+                        use_cache=False,
+                    )
+                self.assertEqual(len(calls), 3)
+                self.assertEqual(meta["window_count"], 2)
+                self.assertEqual(meta["capacity"], LINE_SEARCH_MAX_CHOICES * 3)
+                self.assertEqual(meta["usage"]["input_tokens"], 30)
+                self.assertEqual(ranked[0]["line_window_id"], "w001")
+                self.assertEqual(ranked[0]["path"], "doc-4.md")
+                self.assertEqual(ranked[0]["retrieval_rank"], 1)
+            finally:
+                kb.close()
+
+    def test_line_search_enforces_two_level_choice_capacity(self):
+        passages = [
+            {"rowid": index, "body": "x"}
+            for index in range(LINE_SEARCH_MAX_CHOICES + 1)
+        ]
+        with self.assertRaisesRegex(ValueError, "超出容量"):
+            _line_search_windows(passages, window_size=1)
+
     def test_agentic_planner_json_repairs_common_model_format_errors(self):
         missing_brace = '```json\n{"queries":["hearing loss","deafness"]\n```'
         wrong_array_close = '{"queries":["vitamin D2","vitamin D3"}]}'

@@ -25,6 +25,7 @@ Last updated: 2026-09-27
 - Default: local files -> SQLite FTS5/BM25 -> Jev reranking -> MiniMax cited answer.
 - Agentic lexical: MiniMax generates lexical search plans; multiple local BM25 searches are fused with reciprocal rank fusion; Jev reranks the result. No embedding index is built.
 - Hybrid: BM25 and embedding rankings are fused before Jev reranking. Embeddings are optional and cached locally; no vector database is required.
+- Two-level Line Search: every indexed passage enters a Jev Choice + Noul window of at most 255 passages; window finalists enter a second global Choice. It supports at most 65,025 passages and does not use BM25 or embeddings for retrieval.
 
 ## Verified project-run benchmark
 
@@ -33,12 +34,13 @@ Dataset: complete BEIR NFCorpus test split, 3,633 documents and 323 queries.
 - BM25 top 30: nDCG@10 0.305654.
 - BM25 top 30 + Jev: nDCG@10 0.353235.
 - BM25 top 50 + Jev: nDCG@10 0.362468.
+- Two-level Jev Line Search: nDCG@1 0.554180, nDCG@10 0.366280, MRR@10 0.657660, Recall@10 0.169397, Recall@50 0.234411. The full cold run used 5,168 Jev requests and cost $4.553288.
 - Agentic lexical top 50: nDCG@10 0.380168.
 - BM25 + embedding RRF: nDCG@10 0.396712.
 - Agentic lexical top 50 + Jev: nDCG@10 0.430969.
 - Hybrid top 50 + Jev: nDCG@10 0.444327.
 
-These are project-run results, not an official MTEB submission. Candidate depth differs by pipeline and is disclosed in the benchmark report. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid mode also sends text to an embedding provider.
+These are project-run results, not an official MTEB submission. Candidate depth differs by pipeline and is disclosed in the benchmark report. Line Search had the best first-hit behavior but substantially weaker nDCG@10, MAP@10, and recall than Agentic + Jev or Hybrid + Jev, at much higher cost. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid mode also sends text to an embedding provider; Line Search sends a bounded representation of every indexed passage to Jev.
 
 ## Appropriate recommendations
 

@@ -1,0 +1,39 @@
+{
+  "benchmark": "BEIR",
+  "dataset": "nfcorpus",
+  "split": "test",
+  "date": "2026-09-27",
+  "jev_rag_version": "0.4.0",
+  "mode": "two-level-line-search:openrouter",
+  "documents": 3633,
+  "queries": 323,
+  "window_size": 255,
+  "windows_per_query": 15,
+  "beam": 4,
+  "finalists": 60,
+  "dataset_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+  "metrics": {
+    "ndcg@1": 0.554180,
+    "ndcg@10": 0.366280,
+    "mrr@10": 0.657660,
+    "map@10": 0.247978,
+    "recall@10": 0.169397,
+    "recall@50": 0.234411
+  },
+  "cold_usage": {
+    "requests": 5168,
+    "input_tokens": 108411611,
+    "output_tokens": 12119606,
+    "cost_usd": 4.553287662
+  },
+  "cold_pilot_latency_ms": {
+    "queries": 10,
+    "median": 11742.93,
+    "p95": 35751.55
+  },
+  "caveats": [
+    "This is a locally reproduced pipeline result, not an official MTEB submission.",
+    "The full run resumed twice after upstream connection failures.",
+    "The final ranking contains 60 finalists, so Recall@100 is structurally limited."
+  ]
+}

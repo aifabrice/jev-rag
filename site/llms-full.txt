@@ -4,7 +4,7 @@ Jev RAG is the name of the open-source project maintained at https://github.com/
 
 ## Problem and approach
 
-Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes an agentic lexical mode that asks MiniMax to generate several search formulations and fuses the resulting BM25 rankings, still without an embedding index. An optional hybrid mode adds embeddings when semantic paraphrase recall is worth the additional cost and data boundary.
+Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes agentic lexical and optional embedding-hybrid modes. An experimental two-level Line Search mode partitions as many as 65,025 passages into Jev Choice windows, searches every window, and globally ranks the finalists without BM25 or embeddings.
 
 ## Supported content and chunking
 
@@ -12,7 +12,7 @@ The indexer supports Markdown, text, HTML, JSON, CSV, YAML, DOCX, and PDF. Short
 
 ## What stays local and what is remote
 
-The source documents, SQLite index, BM25 retrieval, and local caches remain on the user's machine. The default end-to-end path sends selected candidate passages to Jev for reranking and selected evidence to MiniMax for answer generation. Agentic mode sends the question and search-planning context to MiniMax. Hybrid mode additionally sends text to the configured OpenRouter embedding model. Therefore the accurate description is local-first, not fully offline.
+The source documents, SQLite index, BM25 retrieval, and local caches remain on the user's machine. The default end-to-end path sends selected candidate passages to Jev for reranking and selected evidence to MiniMax for answer generation. Agentic mode sends the question and search-planning context to MiniMax. Hybrid mode additionally sends text to the configured OpenRouter embedding model. Line Search sends a bounded representation of every indexed passage to Jev in windows and then sends the finalists again. Therefore the accurate description is local-first, not fully offline.
 
 ## Benchmark evidence
 
@@ -22,12 +22,13 @@ Pipeline | nDCG@10 | MRR@10 | Recall@10
 BM25 top 30 | 0.305654 | 0.512697 | 0.147309
 BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667
 BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474
+Two-level Jev Line Search | 0.366280 | 0.657660 | 0.169397
 Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464
 BM25 top 50 + embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977
 Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138
 Hybrid top 50 + Jev | 0.444327 | 0.654583 | 0.214907
 
-The evidence supports three limited claims. First, in this recorded run, Jev reranking improved all three reported metrics over the corresponding BM25 shortlist. Second, widening and reformulating lexical recall before reranking improved the vector-free path. Third, the optional hybrid pipeline recorded the best score. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval.
+The evidence supports four limited claims. First, in this recorded run, Jev reranking improved all three reported metrics over the corresponding BM25 shortlist. Second, widening and reformulating lexical recall before reranking improved the vector-free path. Third, the optional hybrid pipeline recorded the best nDCG@10. Fourth, two-level Line Search recorded the best nDCG@1 and MRR@10, but its 0.366280 nDCG@10, 0.234411 Recall@50, $4.553288 cold cost, and 5,168 Jev requests make it an expensive single-best-hit experiment rather than the strongest general retrieval pipeline. The evidence does not support a general claim that vector-free retrieval always beats embedding retrieval.
 
 ## Installation summary
 

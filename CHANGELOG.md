@@ -4,6 +4,24 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-27
+
+### Added
+
+- A fourth `line-search` retrieval mode based on TypeSafe's Line-by-line Search
+  cookbook: indexed passages are partitioned into windows of at most 255,
+  every window is searched concurrently with Jev Choice + Noul, and a second
+  Choice request globally ranks the window finalists.
+- Configurable window size, finalists per window, local caching, per-stage
+  latency/cost metadata, CLI support, HTTP support, and a web UI selector for
+  two-level Line Search.
+- Capacity checks for the two-level `255 × 255 = 65,025` passage hierarchy and
+  explicit documentation of its cost and remote-data boundary.
+- Complete 323-query BEIR NFCorpus Line Search results, including first-hit,
+  ranking, recall, provider usage, cost, latency caveats, and reproduction data.
+- Per-window cache persistence so successful parallel stages survive a sibling
+  timeout or connection failure and a resumed benchmark only retries misses.
+
 ## [0.3.0] - 2026-09-26
 
 ### Added

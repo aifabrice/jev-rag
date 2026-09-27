@@ -179,6 +179,45 @@ Use `--limit-queries 10` for a lower-cost connectivity check before a full run.
 The compact machine-readable disclosure is stored in
 [`nfcorpus-agentic-summary.json`](nfcorpus-agentic-summary.json).
 
+## Two-level Jev Line Search experiment
+
+On 2026-09-27, version 0.4.0 evaluated the TypeSafe Semantic Find pattern as a
+two-level full-corpus search. The 3,633 documents were partitioned into 15
+windows of at most 255 documents. Every window ran Jev Choice + Noul in
+parallel, retained four finalists, and a final Choice + Noul ranked the 60
+finalists. BM25 and embeddings were not used.
+
+| Pipeline | nDCG@1 | nDCG@10 | MRR@10 | MAP@10 | Recall@10 | Recall@50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BM25 top 50 + Jev | 0.491228 | 0.362468 | 0.593023 | 0.270442 | 0.164474 | 0.209810 |
+| Two-level Line Search | **0.554180** | 0.366280 | **0.657660** | 0.247978 | 0.169397 | 0.234411 |
+| Agentic lexical top 50 + Jev | 0.546956 | 0.430969 | 0.644041 | 0.327298 | 0.204138 | 0.280765 |
+| Hybrid top 50 + Jev | 0.552116 | **0.444327** | 0.654583 | **0.337663** | **0.214907** | **0.318075** |
+
+Line Search improved nDCG@10 by only 1.05% over BM25 top 50 + Jev: it
+improved 120 queries, tied on 85, and degraded 118. Relative to Hybrid + Jev,
+it improved 67, tied on 88, and degraded 168, with 17.57% lower average
+nDCG@10. The very strong nDCG@1 and MRR together with weaker MAP and recall
+show that hierarchical Choice is effective at selecting one likely answer,
+but does not produce a broad graded ranking as reliably as the Agentic and
+Hybrid candidate pools.
+
+The exact cold run used 5,168 Jev requests, 108,411,611 input tokens,
+12,119,606 output tokens, and $4.553288 provider cost. That was 17.44 times
+the observed BM25 top 50 + Jev cost and 12.37 times the Hybrid + Jev reranking
+cost. A ten-query cold pilot had 11,742.93 ms median and 35,751.55 ms p95
+latency. The full run was resumed twice after upstream connection failures, so
+its cache-dominated aggregate latency is not a valid cold-latency measurement.
+
+On the MTEB NFCorpus page observed on 2026-09-27, numerically inserting
+`0.366280` would place the pipeline at approximately #88 of 251 results (the
+displayed scores around that point are rounded). This is not an official MTEB
+rank: the result is a multi-request pipeline evaluated locally, not a submitted
+embedding model.
+
+The compact disclosure is stored in
+[`nfcorpus-line-search-summary.json`](nfcorpus-line-search-summary.json).
+
 ## Latency and provider usage
 
 | Mode | Median query latency | p95 query latency |
@@ -235,3 +274,17 @@ python scripts/benchmark_beir.py \
 Start with `--limit-queries 10` when validating a new provider key. Limited
 runs are deterministic plumbing checks and must not be compared with the full
 323-query result above.
+
+The complete two-level Line Search run uses Jev implicitly and is substantially
+more expensive than shortlist reranking:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus \
+  --top-k 100 \
+  --line-search \
+  --line-search-window-size 255 \
+  --line-search-beam 4 \
+  --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-line-search-full.json
+```
