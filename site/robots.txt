@@ -17,3 +17,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://aifabrice.github.io/jev-rag/sitemap.xml
+Sitemap: https://aifabrice.github.io/jev-rag/sitemap.txt
