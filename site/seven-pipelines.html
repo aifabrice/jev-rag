@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seven Jev RAG pipelines compared — BM25, agentic search, hybrid retrieval and Jev reranking</title>
+    <meta name="description" content="A reproducible comparison of seven Jev RAG retrieval pipelines on 3,633 NFCorpus documents and 323 queries, including quality, latency, cost, and negative results." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="keywords" content="Jev RAG, Jev reranking, BM25 reranker, agentic search, vector-free RAG, hybrid retrieval, local knowledge base" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/seven-pipelines.html" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/seven-pipelines.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://github.com/aifabrice/jev-rag/blob/main/docs/JEV_RAG_SEVEN_PIPELINES_ZH.md" />
+    <meta property="og:title" content="Jev RAG is not one pipeline: seven retrieval paths compared" />
+    <meta property="og:description" content="What 323 public benchmark queries reveal about BM25, agentic lexical search, embeddings, Jev reranking, passage gates, and line search." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/seven-pipelines.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "Jev RAG is not one pipeline: seven retrieval paths compared",
+        "description": "A reproducible comparison of seven Jev RAG retrieval pipelines on the complete BEIR NFCorpus test split.",
+        "url": "https://aifabrice.github.io/jev-rag/seven-pipelines.html",
+        "datePublished": "2026-09-28",
+        "dateModified": "2026-09-28",
+        "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
+        "publisher": {"@type": "Organization", "name": "Jev RAG", "url": "https://aifabrice.github.io/jev-rag/"},
+        "about": ["Jev RAG", "BM25", "agentic search", "hybrid retrieval", "reranking"],
+        "isBasedOn": "https://github.com/beir-cellar/beir"
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="./">Home</a><a href="./#benchmark">Benchmark</a><a href="faq.html">FAQ</a><a href="zh/" lang="zh-CN">中文</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG</a> / Seven pipelines</p>
+        <p class="eyebrow"><span></span> Reproducible retrieval study</p>
+        <h1>Jev RAG is<br /><em>not one pipeline.</em></h1>
+        <p class="lede">I compared seven local knowledge-search paths on the same 3,633 documents and 323 public queries. The result is a practical map of where BM25, agentic query planning, embeddings, Jev reranking, and local rank fusion actually help.</p>
+
+        <section>
+          <p class="kicker">Evaluation setup</p>
+          <h2>One corpus, one protocol.</h2>
+          <p>Every headline result uses the complete BEIR NFCorpus test split: 3,633 documents, 323 test queries, the same qrels, and the same metric implementation. Candidate depths and remote stages are disclosed. These are project-run results, not an official MTEB submission.</p>
+          <p class="source-note"><strong>The central lesson:</strong> retrieval, judgment, ranking policy, and generation are separate layers. A reranker can reorder candidates, but it cannot recover evidence that the first stage never retrieved.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Measured results</p>
+          <h2>The candidate pool sets the ceiling.</h2>
+          <table>
+            <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th></tr></thead>
+            <tbody>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td></tr>
+              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>0.593023</td><td>0.164474</td></tr>
+              <tr><td>Two-level Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td></tr>
+              <tr><td>Hybrid + Unified Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td></tr>
+              <tr><td>Agentic lexical top 50</td><td>0.380168</td><td>0.597940</td><td>0.185464</td></tr>
+              <tr><td>BM25 + embedding RRF top 50</td><td>0.396712</td><td>0.632089</td><td>0.193977</td></tr>
+              <tr><td>Multi-round Agentic Hybrid top 50</td><td>0.424145</td><td>0.637722</td><td>0.206303</td></tr>
+              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td></tr>
+              <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td></tr>
+            </tbody>
+          </table>
+          <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect exact configuration, cost, caveats, and reproduction commands →</a></p>
+        </section>
+
+        <section class="question-list" aria-label="Seven Jev RAG pipelines">
+          <article class="question-card">
+            <h2>1. BM25 + Jev</h2>
+            <p>The smallest path is local SQLite FTS5/BM25 retrieval followed by Jev evidence reranking. Adding Jev to BM25 top 30 raised nDCG@10 from 0.305654 to 0.353235. It is the most inspectable default and requires no embeddings or vector database.</p>
+          </article>
+          <article class="question-card">
+            <h2>2. Agentic lexical + Jev</h2>
+            <p>Two planning rounds generate alternative lexical searches, execute them locally, and fuse the results before Jev. It improves vocabulary coverage without a document embedding index and reached 0.430969 nDCG@10, at the cost of online planner latency.</p>
+          </article>
+          <article class="question-card">
+            <h2>3. Hybrid + Jev</h2>
+            <p>BM25 and embedding rankings are combined with reciprocal rank fusion before Jev. The wider candidate pool increased Recall@50 from 0.209810 to 0.318075; Jev then raised nDCG@10 to 0.444327. This is the strongest current quality/latency compromise.</p>
+          </article>
+          <article class="question-card">
+            <h2>4. Agentic Hybrid + rank fusion</h2>
+            <p>Multi-round lexical planning runs beside the original-query embedding lookup. Jev alone reached 0.445761 nDCG@10; a zero-call local blend of Jev rank and retrieval rank reached 0.450750. The gain suggests that semantic judgment and retrieval priors contain complementary information.</p>
+          </article>
+          <article class="question-card">
+            <h2>5. Taxonomy routing</h2>
+            <p>A two-level corpus taxonomy improved candidate recall but finished slightly below ordinary Hybrid + Jev. More relevant candidates raised the ceiling, yet also made the ranking problem harder. Higher candidate recall was necessary, not sufficient.</p>
+          </article>
+          <article class="question-card">
+            <h2>6. Unified Passage Gate</h2>
+            <p>The gate judged relevance, supporting evidence, contradiction, and prompt-injection risk. Its fixed policy excluded 84.4% of candidates and reduced nDCG@10 below bare Hybrid. It is a useful negative result: safety and evidence thresholds need task-specific calibration.</p>
+          </article>
+          <article class="question-card">
+            <h2>7. Two-level Jev Line Search</h2>
+            <p>Line Search sent bounded windows of the full index through Jev Choice, then globally ranked the finalists. It achieved the strongest first-hit behavior, but weaker evidence-set ranking and the highest observed cost. It fits small, high-value corpora rather than a default retrieval path.</p>
+          </article>
+        </section>
+
+        <section>
+          <p class="kicker">Practical choice</p>
+          <h2>Choose by failure mode.</h2>
+          <table>
+            <thead><tr><th>Priority</th><th>Recommended mode</th></tr></thead>
+            <tbody>
+              <tr><td>Minimum infrastructure and exact terms</td><td>BM25 + Jev</td></tr>
+              <tr><td>Vocabulary mismatch without embeddings</td><td>Agentic lexical + Jev</td></tr>
+              <tr><td>Strong quality with manageable latency</td><td>Hybrid + Jev</td></tr>
+              <tr><td>Maximum measured ranking quality</td><td>Agentic Hybrid</td></tr>
+              <tr><td>Evidence governance experiments</td><td>Passage Gate</td></tr>
+              <tr><td>Small-corpus deep search</td><td>Line Search</td></tr>
+            </tbody>
+          </table>
+          <p>The project is independent and is not affiliated with or endorsed by TypeSafe AI, OpenRouter, or MiniMax.</p>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag">View the source on GitHub</a><a class="button secondary" href="faq.html">Read the FAQ</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent open-source project.</span><span>Published 2026-09-28 · MIT licensed</span></footer>
+    </div>
+  </body>
+</html>

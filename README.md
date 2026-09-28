@@ -13,7 +13,7 @@ passages are sent to the configured Jev and answer-model providers.
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [AI search discoverability](docs/AI_DISCOVERABILITY.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+[简体中文](README.zh-CN.md) · [Seven-pipeline field report](docs/JEV_RAG_SEVEN_PIPELINES.md) · [Architecture](docs/ARCHITECTURE.md) · [AI search discoverability](docs/AI_DISCOVERABILITY.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 **[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
 · [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)

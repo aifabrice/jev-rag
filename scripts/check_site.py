@@ -79,6 +79,7 @@ def check_sitemap() -> None:
     expected = {
         BASE_URL,
         f"{BASE_URL}faq.html",
+        f"{BASE_URL}seven-pipelines.html",
         f"{BASE_URL}zh/",
     }
     if not expected.issubset(locations):
@@ -96,6 +97,7 @@ def check_robots() -> None:
 def main() -> int:
     check_html("index.html", BASE_URL)
     check_html("faq.html", f"{BASE_URL}faq.html")
+    check_html("seven-pipelines.html", f"{BASE_URL}seven-pipelines.html")
     check_html("zh/index.html", f"{BASE_URL}zh/")
     check_sitemap()
     check_robots()
