@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev 怎么做 RAG？BM25 + Jev 重排的开源教程</title>
+    <meta name="description" content="Jev 怎么做 RAG？这份开源教程用本地文件、SQLite BM25、Jev 证据重排和 MiniMax 引用回答搭建完整知识库，并比较无向量、Agentic 与混合检索路径。" />
+    <meta name="keywords" content="Jev 怎么做 RAG,Jev RAG 教程,Jev 知识库,Jev 重排,BM25 Jev,Jev rerank,无向量 RAG,本地知识库" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html" />
+    <meta property="og:title" content="Jev 怎么做 RAG？从 BM25 召回到 Jev 重排" />
+    <meta property="og:description" content="一份可运行的 Jev RAG 开源教程：索引本地文件、BM25 召回、Jev 重排、MiniMax 引用回答。" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../styles.css?v=20260929" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "TechArticle",
+            "headline": "Jev 怎么做 RAG？BM25 + Jev 重排的开源教程",
+            "description": "用本地文件、SQLite BM25、Jev 证据重排和 MiniMax 引用回答搭建完整 RAG 知识库。",
+            "url": "https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html",
+            "inLanguage": "zh-CN",
+            "datePublished": "2026-09-29",
+            "dateModified": "2026-09-29",
+            "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
+            "publisher": {"@type": "Organization", "name": "Jev RAG", "url": "https://aifabrice.github.io/jev-rag/"},
+            "about": ["Jev RAG", "Jev 重排", "BM25", "本地知识库", "无向量 RAG"]
+          },
+          {
+            "@type": "HowTo",
+            "name": "如何用 Jev 搭建 RAG 知识库",
+            "description": "使用 Jev RAG 索引本地文件、召回候选、用 Jev 重排并生成带引用答案。",
+            "totalTime": "PT10M",
+            "tool": ["Python 3.9+", "SQLite FTS5", "OpenRouter API key"],
+            "step": [
+              {"@type": "HowToStep", "name": "安装 Jev RAG", "text": "克隆仓库，创建虚拟环境并安装 documents 可选依赖。"},
+              {"@type": "HowToStep", "name": "配置模型服务", "text": "复制 .env.example，并配置 OPENROUTER_API_KEY。"},
+              {"@type": "HowToStep", "name": "索引本地文件夹", "text": "运行 jev-rag index；默认自动处理短文件和长文档段落。"},
+              {"@type": "HowToStep", "name": "启动问答", "text": "运行 jev-rag serve，在本地网页中使用 BM25、Agentic 或混合检索并交给 Jev 重排。"}
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Jev 怎么做 RAG？",
+                "acceptedAnswer": {"@type": "Answer", "text": "先用 BM25、Agentic 关键词或混合检索召回候选文段，再让 Jev 判断候选是否能够支持问题并重新排序，最后只把高价值证据交给回答模型生成带引用答案。"}
+              },
+              {
+                "@type": "Question",
+                "name": "Jev 能替代向量数据库吗？",
+                "acceptedAnswer": {"@type": "Answer", "text": "Jev 不是向量数据库。Jev RAG 的默认路径用 SQLite BM25 召回，所以可以不部署向量数据库；如果语义召回有明确增益，也可以选择 BM25 与 embedding 混合检索后再用 Jev 重排。"}
+              },
+              {
+                "@type": "Question",
+                "name": "Jev RAG 需要分块吗？",
+                "acceptedAnswer": {"@type": "Answer", "text": "短而聚焦的文件可以整篇索引；长文档通常适合按标题和段落分块，以改善召回、Jev 判断和引用精度。项目支持 auto、none 和 paragraph。"}
+              },
+              {
+                "@type": "Question",
+                "name": "Jev RAG 是开源的吗？",
+                "acceptedAnswer": {"@type": "Answer", "text": "Jev RAG 的应用代码以 MIT 许可证开源。它是独立社区项目；Jev 模型服务、OpenRouter 和 MiniMax 有各自的服务与费用边界。"}
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="主导航">
+        <a class="brand" href="./" aria-label="Jev RAG 中文首页"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="#steps">搭建步骤</a><a href="#modes">路径选择</a><a href="#faq">常见问题</a><a href="../faq.html">完整 FAQ</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG 中文</a> / 搭建教程</p>
+        <p class="eyebrow"><span></span> 开源教程 · 可运行代码 · 本地优先</p>
+        <h1>Jev 怎么做 RAG？<br /><em>先召回，再判断。</em></h1>
+        <p class="lede"><strong>最小可用流程是：本地文件 → SQLite BM25 召回 → Jev 证据重排 → MiniMax 生成带文件引用的答案。</strong>默认不需要 Embedding 或向量数据库；当关键词召回不足时，再选择 Agentic 多查询或混合检索。</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag">获取开源代码</a><a class="button secondary" href="#steps">开始搭建</a></div>
+
+        <section>
+          <p class="kicker">直接答案</p>
+          <h2>Jev 在 RAG 里负责什么？</h2>
+          <p>Jev 不负责从整个知识库中生成答案。它更适合放在<strong>候选召回和答案生成之间</strong>：BM25、Agentic 关键词或 Embedding 先取回一批候选文段，Jev 再逐批判断哪些文段真正支持用户问题，并据此重排。最终回答模型只接收排名靠前的证据。</p>
+          <p class="source-note"><strong>关键边界：</strong>Jev 可以改善候选顺序，却无法找回召回阶段完全漏掉的文档。RAG 效果不好时，要先区分“没召回”与“召回了但没排上去”。</p>
+          <table>
+            <thead><tr><th>阶段</th><th>默认实现</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr><td>索引</td><td>本地 SQLite FTS5</td><td>保存文件、段落与词法索引</td></tr>
+              <tr><td>召回</td><td>BM25 Top 30</td><td>快速找出可能相关的候选文段</td></tr>
+              <tr><td>判断与重排</td><td>Jev，自动分批</td><td>判断证据相关性并调整候选顺序</td></tr>
+              <tr><td>回答</td><td>MiniMax</td><td>根据最多 10 段证据流式生成带引用答案</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="steps">
+          <p class="kicker">十分钟起步</p>
+          <h2>如何搭建 Jev RAG。</h2>
+
+          <h3>1. 下载和安装</h3>
+          <pre class="command"><code>git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[documents]'
+cp .env.example .env</code></pre>
+          <p>Windows PowerShell 使用 <code>.venv\Scripts\Activate.ps1</code>。如果要测试 Embedding 混合检索，安装 <code>'.[documents,embeddings]'</code>。</p>
+
+          <h3>2. 配置模型服务</h3>
+          <pre class="command"><code>OPENROUTER_API_KEY=your_key_here
+# 可选：直接调用 TypeSafe Jev
+TYPESAFE_API_KEY=your_key_here</code></pre>
+          <p>默认端到端路径可通过 OpenRouter 调用 Jev 和 MiniMax。不要把真实 Key 提交到 Git；如果已经泄露，应立即在服务商后台撤销。</p>
+
+          <h3>3. 索引本地文件夹</h3>
+          <pre class="command"><code>jev-rag \
+  --documents /absolute/path/to/documents \
+  --db .knowledge/documents.db \
+  index --rebuild</code></pre>
+          <p>支持 Markdown、TXT、HTML、JSON、CSV、YAML、DOCX 和 PDF。默认 <code>auto</code> 分块会保留短文件，并按标题和段落拆分长文档。若想整篇索引，可加 <code>--chunking none</code>。</p>
+
+          <h3>4. 启动本地问答</h3>
+          <pre class="command"><code>jev-rag \
+  --documents /absolute/path/to/documents \
+  --db .knowledge/documents.db \
+  serve</code></pre>
+          <p>浏览器打开 <code>http://127.0.0.1:8765</code>。界面会显示召回、Embedding、Jev、首 Token、答案生成和总耗时，并展示文件引用。</p>
+
+          <h3>5. 用命令行比较路径</h3>
+          <pre class="command"><code># 默认：BM25 + Jev，不建向量索引
+jev-rag search '我的文档里有哪些 AI 产品？'
+
+# 无向量 Agentic 多查询 + Jev
+jev-rag search '我的文档里有哪些 AI 产品？' --retrieval-mode agentic
+
+# BM25 + Embedding/RRF + Jev
+jev-rag search '我的文档里有哪些 AI 产品？' --retrieval-mode hybrid
+
+# 只看 BM25 召回，不调用 Jev
+jev-rag search '我的文档里有哪些 AI 产品？' --no-jev</code></pre>
+        </section>
+
+        <section id="modes">
+          <p class="kicker">路径选择</p>
+          <h2>什么时候该用哪一种 Jev RAG？</h2>
+          <table>
+            <thead><tr><th>搜索问题</th><th>建议路径</th><th>原因</th></tr></thead>
+            <tbody>
+              <tr><td>名称、编号、术语与原文重合</td><td>BM25 + Jev</td><td>简单、快速、可检查，不需要向量</td></tr>
+              <tr><td>用户说法和文档词汇不同</td><td>Agentic 关键词 + Jev</td><td>模型生成多组检索词，仍不建立文档向量</td></tr>
+              <tr><td>同义改写很多，召回优先</td><td>Hybrid + Jev</td><td>BM25 与 Embedding 召回互补</td></tr>
+              <tr><td>愿意用更高延迟追求最高实测点</td><td>Agentic Hybrid</td><td>两轮规划与语义召回并行，再融合 Jev 和原召回排名</td></tr>
+              <tr><td>小规模、高价值语料深搜</td><td>Jev Line Search</td><td>直接搜索全库窗口，但成本和延迟最高</td></tr>
+            </tbody>
+          </table>
+          <p>在完整 BEIR NFCorpus 测试中，BM25 Top 30 为 <code>0.305654</code> nDCG@10，加入 Jev 后为 <code>0.353235</code>；无向量 Agentic + Jev 为 <code>0.430969</code>；Hybrid + Jev 为 <code>0.444327</code>。这些是项目可复现自测结果，不是官方 MTEB 提交，也不应直接外推到你的私有语料。</p>
+          <p><a class="text-link" href="../seven-pipelines.html">查看七种路径、费用、延迟和负面实验 →</a></p>
+        </section>
+
+        <section id="faq" class="question-list" aria-label="Jev RAG 教程常见问题">
+          <article class="question-card">
+            <h2>Jev 能替代向量数据库吗？</h2>
+            <p>Jev 不是向量数据库。Jev RAG 默认用 SQLite BM25 召回，所以可以在不部署向量数据库的情况下运行；语义召回有明确收益时，也可以选择混合路径。</p>
+          </article>
+          <article class="question-card">
+            <h2>Jev 是 Reranker 吗？</h2>
+            <p>在这套应用里，Jev 承担证据判断和重排角色。应用代码负责分批请求、缓存、阈值策略、排序和失败回退；不能把整套检索系统等同于单个模型。</p>
+          </article>
+          <article class="question-card">
+            <h2>必须给知识库分块吗？</h2>
+            <p>不必须。短而聚焦的文件可以整篇索引；长文档通常需要按标题和段落分块，否则召回得分会被无关内容稀释，Jev 判断和引用也不够精确。</p>
+          </article>
+          <article class="question-card">
+            <h2>Jev RAG 是完全离线的吗？</h2>
+            <p>不是。文件、索引和 BM25 检索保留在本机，但候选证据会发送到 Jev，最终证据会发送到回答模型。混合模式还会调用 Embedding 服务，Line Search 会把每个索引文段的受限表示发送给 Jev。</p>
+          </article>
+          <article class="question-card">
+            <h2>Jev RAG 是开源的吗？</h2>
+            <p>应用代码采用 MIT 许可证，仓库公开了实现、测试、Benchmark、费用与限制。项目是独立社区项目，与 TypeSafe AI、OpenRouter 或 MiniMax 没有隶属或官方背书关系。</p>
+          </article>
+        </section>
+
+        <section class="cta">
+          <p class="kicker">开始验证</p>
+          <h2>用你自己的文件和问题测试。</h2>
+          <p>先跑 BM25 基线，再判断问题出在召回、重排还是生成。不要只凭演示问题决定技术路线。</p>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag">查看 GitHub 仓库</a><a class="button secondary" href="./">阅读中文项目介绍</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG 是独立的开源社区项目。</span><span>教程更新：2026-09-29 · MIT</span></footer>
+    </div>
+  </body>
+</html>

@@ -2,3 +2,4 @@ https://aifabrice.github.io/jev-rag/
 https://aifabrice.github.io/jev-rag/faq.html
 https://aifabrice.github.io/jev-rag/seven-pipelines.html
 https://aifabrice.github.io/jev-rag/zh/
+https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html

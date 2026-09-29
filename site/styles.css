@@ -25,6 +25,8 @@ h1 em { color: var(--green); font-style: normal; }
 .button:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,32,29,.12); } .button.primary { color: white; background: var(--ink); } .button.secondary { background: transparent; }
 .command { width: fit-content; max-width: 100%; margin-top: 28px; padding: 13px 14px; display: flex; align-items: center; gap: 10px; color: #dce9e5; background: #172724; border: 1px solid #2e3f3b; border-radius: 8px; font: 13px var(--mono); }
 .command > span { color: var(--lime); } .command code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .command button { margin-left: auto; padding: 5px 8px; color: #a9bbb6; background: transparent; border: 0; cursor: pointer; font: 11px var(--mono); }
+pre.command { display: block; width: 100%; padding: 18px 20px; overflow-x: auto; white-space: pre; line-height: 1.75; }
+pre.command code { overflow: visible; text-overflow: clip; white-space: inherit; }
 .proof-grid { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: rgba(251,250,245,.65); }
 .proof-grid article { min-height: 150px; padding: 26px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; } .proof-grid article:last-child { border-right: 0; }
 .proof-grid strong { font: 500 38px var(--mono); } .proof-grid span { max-width: 180px; color: var(--muted); font-size: 13px; line-height: 1.45; }

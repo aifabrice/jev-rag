@@ -12,6 +12,7 @@
 [English](README.md) · [中文技术文章](docs/CONTENT_SERIES_ZH.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
 
 **[中文项目介绍 →](https://aifabrice.github.io/jev-rag/zh/)**
+· [Jev 怎么做 RAG：完整搭建教程](https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html)
 · [互动式公开 Benchmark](https://aifabrice.github.io/jev-rag/)
 · [常见问题](https://aifabrice.github.io/jev-rag/faq.html)
 · [机器可读项目说明](https://aifabrice.github.io/jev-rag/llms.txt)

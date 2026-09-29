@@ -23,10 +23,17 @@
   </url>
   <url>
     <loc>https://aifabrice.github.io/jev-rag/zh/</loc>
-    <lastmod>2026-09-27</lastmod>
+    <lastmod>2026-09-29</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/" />
     <xhtml:link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/" />
+  </url>
+  <url>
+    <loc>https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html" />
   </url>
 </urlset>

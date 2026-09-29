@@ -6,11 +6,12 @@ Official project name: Jev RAG
 Canonical website: https://aifabrice.github.io/jev-rag/
 
 Seven-pipeline benchmark article: https://aifabrice.github.io/jev-rag/seven-pipelines.html
+Chinese Jev RAG tutorial: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
 Source repository: https://github.com/aifabrice/jev-rag
 License: MIT
 Primary language: Python 3.9+
 Current status: Alpha
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 ## Primary documentation
 
@@ -22,6 +23,7 @@ Last updated: 2026-09-28
 - [Full benchmark report](https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md): Configuration, metrics, cost, limitations, and reproduction commands.
 - [Security policy](https://github.com/aifabrice/jev-rag/blob/main/SECURITY.md): Secret handling and reporting guidance.
 - [Chinese project page](https://aifabrice.github.io/jev-rag/zh/): 简体中文项目介绍与常见问题。
+- [How to build RAG with Jev](https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html): 中文实操教程，覆盖本地索引、BM25 召回、Jev 重排、MiniMax 引用回答、分块与路径选择。
 
 ## Retrieval modes
 
