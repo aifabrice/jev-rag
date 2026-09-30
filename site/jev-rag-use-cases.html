@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev RAG use cases — reranking, local knowledge search, agentic retrieval and evaluation</title>
+    <meta name="description" content="See where Jev RAG fits for RAG engineers, local knowledge-base builders, search teams, agent developers and retrieval researchers, with measured results and clear limits." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="keywords" content="Jev RAG use cases, Jev reranker, local knowledge search, BM25 reranking, agentic RAG, vector-free RAG, retrieval evaluation" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html" />
+    <meta property="og:title" content="Where does Jev RAG fit? Six practical use cases" />
+    <meta property="og:description" content="A problem-first map for BM25 + Jev reranking, local document search, agentic retrieval, hybrid search and reproducible RAG evaluation." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "TechArticle",
+            "headline": "Jev RAG use cases: reranking, local knowledge search, agentic retrieval and evaluation",
+            "description": "A problem-first guide to choosing Jev RAG for six developer and knowledge-search use cases.",
+            "url": "https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html",
+            "datePublished": "2026-09-30",
+            "dateModified": "2026-09-30",
+            "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
+            "publisher": {"@type": "Organization", "name": "Jev RAG", "url": "https://aifabrice.github.io/jev-rag/"},
+            "about": ["Jev RAG", "retrieval-augmented generation", "local knowledge search", "BM25", "reranking", "agentic search"]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Who should use Jev RAG?",
+                "acceptedAnswer": {"@type": "Answer", "text": "Jev RAG is designed for developers evaluating local document search, BM25 plus semantic reranking, agent-generated lexical searches, hybrid retrieval, or reproducible retrieval benchmarks. It is alpha software rather than a hosted multi-user product."}
+              },
+              {
+                "@type": "Question",
+                "name": "Can Jev RAG search documents without a vector database?",
+                "acceptedAnswer": {"@type": "Answer", "text": "Yes. The default path uses local SQLite FTS5 and BM25 for candidate retrieval, then sends selected passages to Jev for evidence reranking. Embeddings and a vector database are not required for this path."}
+              },
+              {
+                "@type": "Question",
+                "name": "Does Jev replace the answer model in RAG?",
+                "acceptedAnswer": {"@type": "Answer", "text": "No. Jev makes typed decisions about candidate evidence. A separate answer model generates the cited response from the selected passages."}
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="./">Home</a><a href="seven-pipelines.html">Benchmark</a><a href="faq.html">FAQ</a><a href="zh/" lang="zh-CN">中文</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG</a> / Use cases</p>
+        <p class="eyebrow"><span></span> Problem-first project guide</p>
+        <h1>Different users,<br /><em>different retrieval failures.</em></h1>
+        <p class="lede">Jev RAG is not one universal recipe. It is a local knowledge-search application and evaluation harness with seven selectable paths. Start from the failure you need to fix: exact-term recall, vocabulary mismatch, evidence ordering, agent search planning, or retrieval evaluation.</p>
+
+        <section>
+          <p class="kicker">Direct answer</p>
+          <h2>Who is Jev RAG for?</h2>
+          <p><strong>Jev RAG is for developers who want an inspectable retrieval pipeline over local files and need to measure what happens when Jev judges the evidence.</strong> The smallest path is SQLite BM25 followed by Jev reranking. Optional paths add agentic query planning, embeddings, local rank fusion, passage gates, taxonomy routing, or full-corpus Jev Line Search.</p>
+          <p class="source-note">It is local-first, not fully offline. Indexing and lexical retrieval stay local, but configured remote providers receive the text needed for reranking, planning, embeddings, or answer generation.</p>
+        </section>
+
+        <section class="question-list" aria-label="Jev RAG audiences and use cases">
+          <article class="question-card">
+            <h2>For RAG engineers: rerank a bounded candidate set</h2>
+            <p><strong>Problem:</strong> the first-stage retriever returns relevant-looking passages that do not actually support an answer.</p>
+            <p><strong>Use:</strong> retrieve locally with BM25 or a hybrid method, then ask Jev one consistent evidence question per candidate and sort the returned probabilities in code.</p>
+            <p><strong>Measured boundary:</strong> on NFCorpus, Jev raised BM25 top-30 nDCG@10 from 0.305654 to 0.353235. It cannot recover evidence that BM25 never retrieved.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>For local knowledge-base builders: search a folder first</h2>
+            <p><strong>Problem:</strong> you want to test document search without deploying an embedding service, vector index, and database before the first useful query.</p>
+            <p><strong>Use:</strong> point Jev RAG at Markdown, text, HTML, JSON, CSV, YAML, DOCX, or PDF files. SQLite FTS5 builds a local lexical index; the web interface returns cited passages and streams an answer.</p>
+            <p><strong>Boundary:</strong> source files and the index remain local, but selected text is sent to configured providers. Do not use the default hosted-provider configuration for documents that must never leave the machine.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>For search engineers: compare lexical and semantic recall</h2>
+            <p><strong>Problem:</strong> exact identifiers favor BM25, while synonyms and paraphrases favor semantic retrieval.</p>
+            <p><strong>Use:</strong> keep the same corpus and metrics while switching between BM25, embedding RRF, agentic lexical search, and hybrid candidate pools before the same Jev stage.</p>
+            <p><strong>Measured boundary:</strong> plain hybrid retrieval reached 0.396712 nDCG@10; Hybrid + Jev reached 0.444327. Wider recall and better ranking both mattered.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>For agent developers: turn planning into bounded searches</h2>
+            <p><strong>Problem:</strong> one user question may hide several searchable subphrases, names, or constraints.</p>
+            <p><strong>Use:</strong> let a planning model propose multiple lexical searches, execute every search locally, fuse the rankings, and give Jev a bounded shortlist. Code still owns the loop, limits, and fallback behavior.</p>
+            <p><strong>Measured boundary:</strong> Agentic lexical + Jev reached 0.430969 nDCG@10 without a document embedding index, but online planning added latency and provider dependency.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>For Jev developers: test where typed judgment belongs</h2>
+            <p><strong>Problem:</strong> a Jev integration can use independent Noul questions, a listwise Choice, a multi-question gate, or a local fusion after the model. Those designs are not interchangeable.</p>
+            <p><strong>Use:</strong> compare the ordinary passage reranker, the unified Passage Gate, and two-level Line Search against the same retrieval baselines.</p>
+            <p><strong>Measured boundary:</strong> the fixed Passage Gate was a negative result at 0.376298 nDCG@10, while Line Search improved first-hit behavior but cost USD 4.553288 for the cold full-corpus run.</p>
+          </article>
+
+          <article class="question-card">
+            <h2>For retrieval researchers: reproduce the whole comparison</h2>
+            <p><strong>Problem:</strong> architecture claims are difficult to evaluate when candidate pools, metrics, costs, and failed experiments are hidden.</p>
+            <p><strong>Use:</strong> run the published commands on the complete BEIR NFCorpus test split: 3,633 documents and 323 queries, with shared qrels and metric code.</p>
+            <p><strong>Boundary:</strong> these are project-run results, not an official MTEB submission. The repository publishes negative results and configuration caveats so another corpus can falsify the conclusions.</p>
+          </article>
+        </section>
+
+        <section>
+          <p class="kicker">Problem-to-pipeline map</p>
+          <h2>Choose the smallest path that addresses your failure.</h2>
+          <table>
+            <thead><tr><th>If you care most about…</th><th>Start with</th><th>Accept this trade-off</th></tr></thead>
+            <tbody>
+              <tr><td>Exact names, IDs and simple deployment</td><td>BM25 + Jev</td><td>Weak synonym recall</td></tr>
+              <tr><td>Vocabulary mismatch without document embeddings</td><td>Agentic lexical + Jev</td><td>Planner latency and remote calls</td></tr>
+              <tr><td>Semantic recall and ranking quality</td><td>Hybrid + Jev</td><td>Embedding setup and remote text boundary</td></tr>
+              <tr><td>Highest measured NFCorpus result</td><td>Agentic Hybrid</td><td>Two planning rounds; 6.99 s cold median retrieval</td></tr>
+              <tr><td>Evidence and injection policy experiments</td><td>Passage Gate</td><td>Threshold calibration; current fixed policy underperformed</td></tr>
+              <tr><td>Small-corpus Jev-first deep search</td><td>Line Search</td><td>Highest provider cost and widest remote-data boundary</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <p class="kicker">What it does not replace</p>
+          <h2>Retrieval, judgment and generation remain separate.</h2>
+          <p>Jev does not generate the final answer and does not make a weak candidate pool complete. The retriever determines which evidence can be judged. Jev scores or selects within a bounded state. The answer model writes from the retained evidence. Keeping those stages separate makes failures measurable and lets you change one layer without pretending the whole system improved.</p>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Compare all seven pipelines</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent open-source project.</span><span>Published 2026-09-30 · MIT licensed</span></footer>
+    </div>
+  </body>
+</html>

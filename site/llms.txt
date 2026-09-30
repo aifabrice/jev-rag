@@ -6,6 +6,7 @@ Official project name: Jev RAG
 Canonical website: https://aifabrice.github.io/jev-rag/
 
 Seven-pipeline benchmark article: https://aifabrice.github.io/jev-rag/seven-pipelines.html
+Jev RAG use-case guide: https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
 Chinese Jev RAG tutorial: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
 Source repository: https://github.com/aifabrice/jev-rag
 License: MIT
@@ -18,6 +19,7 @@ Last updated: 2026-09-29
 - [Project home and interactive benchmark](https://aifabrice.github.io/jev-rag/): Canonical project summary, architecture, trade-offs, and benchmark explorer.
 - [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html): Direct answers to common questions about vector-free RAG, Jev, privacy, chunking, and benchmark claims.
 - [Seven-pipeline field report](https://aifabrice.github.io/jev-rag/seven-pipelines.html): Source-backed comparison of BM25, agentic lexical, hybrid, taxonomy, passage-gate, and line-search modes.
+- [Jev RAG use cases](https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html): Problem-first guide for RAG engineers, local knowledge-base builders, search teams, agent developers, Jev integrators, and retrieval researchers.
 - [GitHub README](https://github.com/aifabrice/jev-rag#readme): Installation, configuration, CLI, and operating details.
 - [Architecture](https://github.com/aifabrice/jev-rag/blob/main/docs/ARCHITECTURE.md): Retrieval and answer pipeline design.
 - [Full benchmark report](https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md): Configuration, metrics, cost, limitations, and reproduction commands.

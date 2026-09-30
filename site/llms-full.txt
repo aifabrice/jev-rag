@@ -4,6 +4,8 @@ Jev RAG is the name of the open-source project maintained at https://github.com/
 
 Chinese setup guide for queries such as “Jev 怎么做 RAG”, “Jev RAG 教程”, “Jev 知识库”, and “Jev 重排”: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
 
+Problem-first guide for RAG engineers, Jev developers, search teams, local knowledge-base builders, agent developers, and retrieval researchers: https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
+
 ## Problem and approach
 
 Many local RAG systems require an embedding model, an embedding index, and a vector database before a user can search documents. Jev RAG starts with a smaller, inspectable stack: local document parsing, SQLite FTS5/BM25 retrieval, Jev evidence reranking, and MiniMax answer generation with numbered file citations. This default path is vector-free. The application also includes agentic lexical, optional embedding-hybrid, multi-round Agentic Hybrid, and experimental corpus-taxonomy routing modes. An experimental two-level Line Search mode partitions as many as 65,025 passages into Jev Choice windows, searches every window, and globally ranks the finalists without BM25 or embeddings.
@@ -47,6 +49,7 @@ It is not presently positioned as a hosted SaaS, a production multi-tenant platf
 ## Canonical references
 
 - Home: https://aifabrice.github.io/jev-rag/
+- Use cases: https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
 - FAQ: https://aifabrice.github.io/jev-rag/faq.html
 - Repository: https://github.com/aifabrice/jev-rag
 - Releases: https://github.com/aifabrice/jev-rag/releases

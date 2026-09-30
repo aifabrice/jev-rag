@@ -80,6 +80,7 @@ def check_sitemap() -> None:
         BASE_URL,
         f"{BASE_URL}faq.html",
         f"{BASE_URL}seven-pipelines.html",
+        f"{BASE_URL}jev-rag-use-cases.html",
         f"{BASE_URL}zh/",
         f"{BASE_URL}zh/jev-rag-guide.html",
     }
@@ -99,6 +100,7 @@ def main() -> int:
     check_html("index.html", BASE_URL)
     check_html("faq.html", f"{BASE_URL}faq.html")
     check_html("seven-pipelines.html", f"{BASE_URL}seven-pipelines.html")
+    check_html("jev-rag-use-cases.html", f"{BASE_URL}jev-rag-use-cases.html")
     check_html("zh/index.html", f"{BASE_URL}zh/")
     check_html("zh/jev-rag-guide.html", f"{BASE_URL}zh/jev-rag-guide.html")
     check_sitemap()
