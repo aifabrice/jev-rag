@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -20,6 +21,7 @@ from local_kb import (
     agentic_vector_rank_fusion,
     answer_messages,
     build_parser,
+    cached_query_embedding,
     checkout_exclude_pattern,
     discover_documents_root,
     fts_query,
@@ -29,6 +31,7 @@ from local_kb import (
     openrouter_error_message,
     reciprocal_rank_fusion,
     split_passages,
+    stream_openrouter_answer,
     two_level_line_search,
 )
 
@@ -160,6 +163,111 @@ class WebAppTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_switching_document_root_rebuilds_instead_of_reusing_old_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first_root = base / "first"
+            second_root = base / "second"
+            first_root.mkdir()
+            second_root.mkdir()
+            first_path = first_root / "same.txt"
+            second_path = second_root / "same.txt"
+            first_path.write_text("alpha secret", encoding="utf-8")
+            second_path.write_text("bravo public", encoding="utf-8")
+            shared_time = 1_700_000_000
+            os.utime(first_path, (shared_time, shared_time))
+            os.utime(second_path, (shared_time, shared_time))
+            database = base / "kb.db"
+
+            first = KnowledgeBase(database, first_root)
+            first.index("none")
+            first.close()
+
+            second = KnowledgeBase(database, second_root)
+            try:
+                self.assertFalse(second.status()["index_root_matches"])
+                with self.assertRaisesRegex(RuntimeError, "另一个知识目录"):
+                    second.lexical_search("alpha")
+                stats = second.index("none")
+                self.assertEqual(stats["documents"], 1)
+                self.assertFalse(second.lexical_search("alpha"))
+                self.assertEqual(second.lexical_search("bravo")[0]["path"], "same.txt")
+            finally:
+                second.close()
+
+    def test_symlink_cannot_index_a_file_outside_document_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / "docs"
+            root.mkdir()
+            outside = base / "private.txt"
+            outside.write_text("outside secret", encoding="utf-8")
+            try:
+                (root / "linked.txt").symlink_to(outside)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            kb = KnowledgeBase(base / "kb.db", root)
+            try:
+                stats = kb.index("none")
+                self.assertEqual(stats["documents"], 0)
+                self.assertFalse(kb.lexical_search("outside"))
+            finally:
+                kb.close()
+
+    def test_truncated_generator_stream_is_not_reported_as_success(self):
+        class TruncatedResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                payload = {
+                    "choices": [{"delta": {"content": "partial"}, "finish_reason": None}]
+                }
+                yield f"data: {json.dumps(payload)}\n".encode()
+
+        source = {
+            "path": "doc.md",
+            "heading": "Doc",
+            "start_line": 1,
+            "end_line": 1,
+            "body": "evidence",
+        }
+        with (
+            patch.dict("local_kb.os.environ", {"OPENROUTER_API_KEY": "test"}),
+            patch("local_kb.urllib.request.urlopen", return_value=TruncatedResponse()),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "正常结束前断开"):
+                list(stream_openrouter_answer("query", [source], "model", 10, 100))
+
+    def test_query_embedding_cache_preserves_vector_and_skips_second_request(self):
+        class MemoryCache:
+            def __init__(self):
+                self.values = {}
+
+            def cache_get(self, key):
+                return self.values.get(key)
+
+            def cache_put(self, key, value):
+                self.values[key] = value
+
+        cache = MemoryCache()
+        with patch(
+            "local_kb.request_embeddings",
+            return_value=([[0.125, -0.75]], {"prompt_tokens": 3, "cost": 0.01}),
+        ) as request:
+            first, first_meta = cached_query_embedding(cache, "same query", "model", 10)
+            second, second_meta = cached_query_embedding(cache, "same query", "model", 10)
+
+        request.assert_called_once_with(["same query"], "model", 10)
+        self.assertEqual(first, second)
+        self.assertFalse(first_meta["cache_hit"])
+        self.assertTrue(second_meta["cache_hit"])
+        self.assertEqual(second_meta["usage"], {})
+
     def test_two_level_line_search_selects_windows_then_passages(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "docs"
@@ -301,6 +409,98 @@ class SearchTests(unittest.TestCase):
                 )
             finally:
                 kb.close()
+
+    def test_agentic_retrieval_runs_more_than_three_planning_rounds(self):
+        """A configured fourth round sees prior context and joins the same fusion."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "docs"
+            root.mkdir()
+            (root / "hearing.md").write_text(
+                "Deafness, auditory loss, tinnitus and hyperacusis describe hearing issues.",
+                encoding="utf-8",
+            )
+            (root / "other.md").write_text("Unrelated weather notes.", encoding="utf-8")
+            kb = KnowledgeBase(Path(tmp) / "kb.db", root)
+            kb.index("none")
+            plans = [
+                (["deafness"], {"model": "planner", "elapsed_ms": 2, "usage": {"cost": 0.01}}),
+                (["auditory loss"], {"model": "planner", "elapsed_ms": 3, "usage": {"cost": 0.02}}),
+                (["tinnitus"], {"model": "planner", "elapsed_ms": 4, "usage": {"cost": 0.03}}),
+                (["hyperacusis"], {"model": "planner", "elapsed_ms": 5, "usage": {"cost": 0.04}}),
+            ]
+            # The planner receives the live `search_queries` list, so snapshot
+            # each round's context as it is handed over rather than reading the
+            # recorded references after the loop has extended them.
+            scripted = iter(plans)
+            seen_queries: list[list[str] | None] = []
+            seen_observations: list[list[dict] | None] = []
+
+            def fake_planner(query, **kwargs):
+                previous = kwargs.get("previous_queries")
+                observations = kwargs.get("observations")
+                seen_queries.append(None if previous is None else list(previous))
+                seen_observations.append(
+                    None if observations is None else list(observations)
+                )
+                return next(scripted)
+
+            try:
+                with patch(
+                    "local_kb.request_agentic_queries", side_effect=fake_planner
+                ) as planner:
+                    results, meta = agentic_retrieve(
+                        kb, "hearing problem", rounds=4, queries_per_round=1, top_k=10
+                    )
+                agentic = meta["agentic"]
+                self.assertEqual(planner.call_count, 4)
+                self.assertEqual(results[0]["path"], "hearing.md")
+                self.assertEqual(meta["mode"], "agentic")
+                self.assertEqual(agentic["rounds"], 4)
+                self.assertEqual(len(agentic["planner_rounds"]), 4)
+                self.assertAlmostEqual(agentic["usage"]["cost"], 0.10)
+                # 1 original run plus one run per planned query.
+                self.assertEqual(
+                    agentic["search_queries"],
+                    [
+                        "hearing problem",
+                        "deafness",
+                        "auditory loss",
+                        "tinnitus",
+                        "hyperacusis",
+                    ],
+                )
+                self.assertEqual(len(agentic["run_result_counts"]), 5)
+                # Each follow-up round sees every query issued before it, which
+                # is what makes the third round able to avoid repeating work.
+                self.assertEqual(
+                    seen_queries,
+                    [
+                        None,
+                        ["hearing problem", "deafness"],
+                        ["hearing problem", "deafness", "auditory loss"],
+                        [
+                            "hearing problem",
+                            "deafness",
+                            "auditory loss",
+                            "tinnitus",
+                        ],
+                    ],
+                )
+                self.assertIsNone(seen_observations[0])
+                self.assertTrue(all(seen_observations[1:]))
+            finally:
+                kb.close()
+
+    def test_agentic_retrieval_rejects_non_positive_rounds(self):
+        """Validation rejects invalid rounds before any corpus access."""
+        with self.assertRaisesRegex(ValueError, "正整数"):
+            agentic_retrieve(None, "hearing problem", rounds=0)
+
+    def test_cli_accepts_more_than_three_agentic_rounds(self):
+        args = build_parser().parse_args(
+            ["search", "query", "--retrieval-mode", "agentic-hybrid", "--agentic-rounds", "6"]
+        )
+        self.assertEqual(args.agentic_rounds, 6)
 
     def test_rrf_combines_bm25_and_vector_ranks(self):
         base = {

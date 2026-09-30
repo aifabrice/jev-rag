@@ -4,8 +4,17 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [Unreleased]
 
+### Changed
+
+- Persist exact query embeddings by query and model so repeated Hybrid runs
+  skip a redundant provider request without changing vectors or rankings.
+- Generalize Agentic retrieval from a fixed two/three-round implementation to
+  any positive configured round count while keeping two as the default.
+
 ### Security
 
+- Ignore document symlinks whose resolved target is outside the selected
+  knowledge root, preventing accidental indexing of unrelated local files.
 - Pin every GitHub Action to a full commit SHA while retaining the upstream
   major version in a comment for Dependabot updates.
 - Add weekly dependency update checks for Python packages and GitHub Actions,
@@ -15,6 +24,10 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ### Fixed
 
+- Rebuild the index when its configured document root changes, and reject
+  stale-root searches when automatic indexing is disabled.
+- Treat an answer stream that closes without a provider completion signal as
+  an error instead of recording a partial answer as successful.
 - Install the embedding extra in CI so the taxonomy test suite has NumPy on
   every supported Python version.
 - Compile `taxonomy.py` explicitly during the CI bytecode validation step.

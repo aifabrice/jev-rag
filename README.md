@@ -81,16 +81,17 @@ configuration was evaluated on the same test set.
 default: local files -> SQLite BM25 ----------------------> Jev -> MiniMax
 agentic: local files -> MiniMax plans -> multi-BM25/RRF --> Jev -> MiniMax
 hybrid:  local files -> BM25 + OpenRouter embeddings/RRF -> Jev -> MiniMax
-agentic-hybrid: two-round plans -> multi-BM25 + embedding/RRF -> Jev + retrieval prior -> MiniMax
+agentic-hybrid: multi-round plans -> multi-BM25 + embedding/RRF -> Jev + retrieval prior -> MiniMax
 taxonomy: local files -> corpus taxonomy -> Hybrid top 50 + routed extras -> Jev -> MiniMax
 gate:    local files -> BM25 + embeddings/RRF -> unified Jev Gate -> MiniMax
 line:    local files -> parallel Jev Choice windows -> global Choice -> MiniMax
 ```
 
 Jev RAG indexes a local folder and defaults to vector-free SQLite FTS5/BM25.
-The web UI and CLI expose seven modes. Agentic mode runs two rounds of
-model-planned local lexical searches and fuses them before Jev, without an
-embedding index. Hybrid mode fuses BM25 and embedding rankings before Jev. No
+The web UI and CLI expose seven modes. Agentic mode defaults to two rounds of
+model-planned local lexical searches, accepts any positive round count, and
+fuses every round before Jev without an embedding index. Hybrid mode fuses BM25
+and embedding rankings before Jev. No
 vector database is required: the optional normalized embedding matrix is cached
 locally. Passage Gate replaces ordinary reranking with four simultaneous Jev
 judgments per candidate and routes evidence into include, conflicting, or
@@ -116,9 +117,9 @@ used.
 ## Why this project
 
 - Vector-free BM25 + Jev remains the default; no embedding setup is required.
-- Optional two-round Agentic Search + Jev improves lexical recall without building embeddings.
+- Optional multi-round Agentic Search + Jev improves lexical recall without building embeddings.
 - Optional BM25 + Embedding reciprocal-rank fusion before the same Jev stage.
-- Optional two-round Agentic BM25 + original-query embedding fusion before Jev.
+- Optional multi-round Agentic BM25 + original-query embedding fusion before Jev.
   A dev-selected local Jev/retrieval rank fusion improves the measured final
   order without another provider call, but planning still adds substantial
   latency.
@@ -311,7 +312,7 @@ jev-rag search 'query' --retrieval-mode hybrid-gate
 # Agent-planned local lexical searches followed by Jev; no vector index.
 jev-rag search 'query' --retrieval-mode agentic
 
-# Two-round Agentic BM25 plus parallel original-query embedding, then Jev.
+# Multi-round Agentic BM25 plus parallel original-query embedding, then Jev.
 jev-rag search 'query' --retrieval-mode agentic-hybrid
 
 # Search every indexed passage with parallel Jev windows, then globally rank finalists.
@@ -355,6 +356,7 @@ Scanned or image-only PDFs require OCR before indexing. PDF extraction prefers `
 - Indexes, caches, and answer histories are stored under `.knowledge/` by default.
 - BM25 indexing and retrieval stay local.
 - Default discovery indexes supported text documents; it does not upload the folder itself.
+- File symlinks that resolve outside the selected document root are ignored.
 - Hybrid mode sends passage text once for corpus embeddings and sends each query for query embedding; vectors are cached locally.
 - Hybrid Gate additionally sends the fused top 50 excerpts to Jev for four
   judgments per passage. Injection filtering is probabilistic, not a complete security boundary.

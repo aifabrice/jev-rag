@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -271,7 +272,12 @@ def request_embeddings(
                     time.sleep(0.5 * (2**attempt))
                     continue
                 raise RuntimeError(f"Embedding HTTP {exc.code}: {detail[:1000]}") from exc
-            except (urllib.error.URLError, TimeoutError) as exc:
+            except (
+                urllib.error.URLError,
+                TimeoutError,
+                ConnectionError,
+                http.client.HTTPException,
+            ) as exc:
                 if attempt < retries:
                     time.sleep(0.5 * (2**attempt))
                     continue
@@ -600,7 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--agentic",
         action="store_true",
-        help="Enable two-round LLM-planned local lexical retrieval before Jev",
+        help="Enable multi-round LLM-planned local lexical retrieval before Jev",
     )
     parser.add_argument(
         "--agentic-hybrid",
@@ -618,7 +624,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_AGENTIC_HYBRID_VECTOR_WEIGHT,
     )
     parser.add_argument("--agentic-model", default=DEFAULT_AGENTIC_MODEL)
-    parser.add_argument("--agentic-rounds", type=int, choices=[1, 2], default=2)
+    parser.add_argument("--agentic-rounds", type=int, default=2)
     parser.add_argument("--agentic-queries", type=int, default=5)
     parser.add_argument("--agentic-per-query-k", type=int, default=100)
     parser.add_argument(
@@ -653,6 +659,8 @@ def main() -> int:
     args = build_parser().parse_args()
     if not 1 <= args.top_k <= 100:
         raise SystemExit("--top-k must be between 1 and 100")
+    if args.agentic_rounds < 1:
+        raise SystemExit("--agentic-rounds must be positive")
     if not 1 <= args.vector_top_k <= 100:
         raise SystemExit("--vector-top-k must be between 1 and 100")
     if args.rrf_k < 1:

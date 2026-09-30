@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import sys
@@ -80,7 +81,7 @@ def request_decision(
     state: Any,
     questions: Any,
     timeout: float,
-    retries: int = 2,
+    retries: int = 5,
 ) -> dict[str, Any]:
     config = PROVIDERS[provider]
     api_key = os.environ.get(config["env"], "").strip()
@@ -121,7 +122,12 @@ def request_decision(
             except json.JSONDecodeError:
                 detail = detail[:1000]
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            http.client.HTTPException,
+        ) as exc:
             if attempt < retries:
                 time.sleep(0.4 * (2**attempt))
                 continue

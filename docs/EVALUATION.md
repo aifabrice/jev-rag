@@ -204,6 +204,9 @@ judgments are cached locally. Official relevance judgments are used only after
 ranking to calculate metrics; they are never included in planner prompts. The
 `medical` domain hint is disclosed because NFCorpus is a medical collection;
 the application default is domain-neutral.
+`--agentic-rounds` accepts any positive integer, while the published baseline
+and application default remain two. Tune additional rounds on `dev` first and
+reserve `test` for one final evaluation after selecting the round count.
 
 ## Evaluate multi-round Agentic Hybrid + Jev
 
