@@ -149,13 +149,20 @@ class PassageTests(unittest.TestCase):
 
 
 class WebAppTests(unittest.TestCase):
+    def test_web_app_uses_focused_search_console_layout(self):
+        self.assertIn('class="hero"', WEB_APP)
+        self.assertIn('class="search-console"', WEB_APP)
+        self.assertIn('<textarea id="q"', WEB_APP)
+        self.assertIn('class="index-status"', WEB_APP)
+        self.assertIn("Number(v)>0", WEB_APP)
+
     def test_web_app_supports_persisted_chinese_and_english_ui(self):
         self.assertIn('data-language="zh-CN"', WEB_APP)
         self.assertIn('data-language="en"', WEB_APP)
         self.assertIn("const languageKey='jev-rag-language'", WEB_APP)
         self.assertIn("localStorage.setItem(languageKey,currentLanguage)", WEB_APP)
         self.assertIn("document.documentElement.lang=currentLanguage", WEB_APP)
-        self.assertIn("'en':{tagline:", WEB_APP)
+        self.assertIn("'en':{brandSubtitle:", WEB_APP)
 
     def test_streaming_stage_messages_are_localized_by_stable_stage_code(self):
         self.assertIn("function stageMessage(ev)", WEB_APP)
