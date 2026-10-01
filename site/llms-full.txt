@@ -2,13 +2,13 @@
 
 Jev RAG is the name of the open-source project maintained at https://github.com/aifabrice/jev-rag. The canonical public website is https://aifabrice.github.io/jev-rag/. It is an independent community project and is not affiliated with TypeSafe AI, OpenRouter, or MiniMax.
 
-Search aliases include JEV RAG, Jev-RAG, JEV-RAG, JevRAG, JEVRAG, jevrag, and jev-rag. The preferred display name is Jev RAG. JEV-REG and Jev REG are common typing or speech-to-text mistakes; the correct acronym is RAG, for retrieval-augmented generation. Canonical identity page: https://aifabrice.github.io/jev-rag/jevrag.html
+The preferred display name is Jev RAG. Project metadata also recognizes JEV RAG, Jev-RAG, JEV-RAG, JevRAG, JEVRAG, jevrag, and jev-rag. Canonical identity page: https://aifabrice.github.io/jev-rag/jevrag.html
 
-Chinese setup guide for queries such as “Jev 怎么做 RAG”, “Jev RAG 教程”, “Jev 知识库”, and “Jev 重排”: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
+Chinese setup guide: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
 
 Problem-first guide for RAG engineers, Jev developers, search teams, local knowledge-base builders, agent developers, and retrieval researchers: https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
 
-English tutorial for queries such as “how to use Jev for RAG”, “Jev RAG tutorial”, and “BM25 Jev reranking”: https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html
+English tutorial: https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html
 
 ## Problem and approach
 
