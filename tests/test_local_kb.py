@@ -149,6 +149,21 @@ class PassageTests(unittest.TestCase):
 
 
 class WebAppTests(unittest.TestCase):
+    def test_web_app_supports_persisted_chinese_and_english_ui(self):
+        self.assertIn('data-language="zh-CN"', WEB_APP)
+        self.assertIn('data-language="en"', WEB_APP)
+        self.assertIn("const languageKey='jev-rag-language'", WEB_APP)
+        self.assertIn("localStorage.setItem(languageKey,currentLanguage)", WEB_APP)
+        self.assertIn("document.documentElement.lang=currentLanguage", WEB_APP)
+        self.assertIn("'en':{tagline:", WEB_APP)
+
+    def test_streaming_stage_messages_are_localized_by_stable_stage_code(self):
+        self.assertIn("function stageMessage(ev)", WEB_APP)
+        self.assertIn("ev.stage==='retrieval_started'", WEB_APP)
+        self.assertIn("ev.stage==='candidates_ready'", WEB_APP)
+        self.assertIn("ev.stage==='generation_started'", WEB_APP)
+        self.assertIn("ev.stage==='first_token'", WEB_APP)
+
     def test_retrieval_snippets_render_markdown(self):
         self.assertIn('class="snippet rich"', WEB_APP)
         self.assertIn("renderMarkdown(x.snippet)", WEB_APP)
