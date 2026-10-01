@@ -1,5 +1,7 @@
 # Jev RAG
 
+Also searched as **JEV RAG**, **Jev-RAG**, **JEV-RAG**, **JevRAG**, **JEVRAG**, **jevrag**, or **jev-rag**. The canonical project name is **Jev RAG** and the canonical repository is `aifabrice/jev-rag`. `JEV-REG` is a common misspelling; the correct acronym is RAG (retrieval-augmented generation).
+
 **Jev RAG is an open-source local knowledge search engine with seven selectable pipelines: BM25 + Jev by default, agentic lexical search, embedding hybrid retrieval, multi-round Agentic Hybrid, taxonomy-routed hybrid retrieval, a unified Jev Passage Gate, and hierarchical Jev Line Search.**
 
 Use Jev RAG to search a local document folder, rerank candidate passages with
@@ -17,6 +19,7 @@ passages are sent to the configured Jev and answer-model providers.
 
 **[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
 · [How to use Jev for RAG](https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html)
+· [Project name and aliases](https://aifabrice.github.io/jev-rag/jevrag.html)
 · [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)
 · [Machine-readable project facts](https://aifabrice.github.io/jev-rag/llms.txt)
 

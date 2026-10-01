@@ -3,11 +3,14 @@
 > Jev RAG is an open-source local-first knowledge search application. It uses SQLite FTS5/BM25 for retrieval, Jev for evidence reranking, and MiniMax for cited answers. Its default pipeline does not require embeddings or a vector database.
 
 Official project name: Jev RAG
+Search aliases: JEV RAG, Jev-RAG, JEV-RAG, JevRAG, JEVRAG, jevrag, jev-rag
+Common misspellings: JEV-REG, Jev REG (the correct acronym is RAG)
 Canonical website: https://aifabrice.github.io/jev-rag/
 
 Seven-pipeline benchmark article: https://aifabrice.github.io/jev-rag/seven-pipelines.html
 Jev RAG use-case guide: https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
 English Jev RAG tutorial: https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html
+Project identity and spelling aliases: https://aifabrice.github.io/jev-rag/jevrag.html
 Chinese Jev RAG tutorial: https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html
 Source repository: https://github.com/aifabrice/jev-rag
 License: MIT
