@@ -44,6 +44,11 @@ pre.command code { overflow: visible; text-overflow: clip; white-space: inherit;
 .metric-lead span { display: block; min-height: 40px; color: var(--muted); font-size: 13px; } .metric-lead strong { display: block; margin: 10px 0 5px; color: var(--green); font: 500 clamp(44px, 6vw, 72px) var(--mono); letter-spacing: -.06em; } .metric-lead small { color: var(--muted); font: 12px var(--mono); }
 .metric-bars { display: grid; gap: 27px; } .metric-row > div:first-child { display: flex; justify-content: space-between; margin-bottom: 10px; font: 12px var(--mono); } .metric-row output { color: var(--green-deep); }
 .bar { height: 7px; background: #e1e4d9; border-radius: 99px; overflow: hidden; } .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green-deep), var(--lime)); border-radius: inherit; transition: width .45s cubic-bezier(.2,.8,.2,1); }
+.latency-stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.latency-stats > div { padding: 15px 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.latency-stats span, .latency-stats small { display: block; color: var(--muted); font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.latency-stats output { display: block; margin-top: 8px; color: var(--green-deep); font: 500 24px var(--mono); }
+.latency-stats small { grid-column: 1 / -1; text-transform: none; letter-spacing: 0; line-height: 1.45; }
 .pipeline-note { grid-column: 1 / -1; margin: -5px 0 0; padding-top: 22px; color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; line-height: 1.6; }
 .benchmark-caveat { margin-top: 20px; padding: 22px 24px; color: var(--muted); border-left: 3px solid var(--orange); background: rgba(226,135,67,.07); font-size: 13px; line-height: 1.65; } .benchmark-caveat strong { color: var(--ink); } .benchmark-caveat a { margin-left: 8px; color: var(--green-deep); font-weight: 700; }
 .flow { display: grid; grid-template-columns: 1fr 70px 1.25fr 70px 1fr 70px 1fr; align-items: center; margin-top: 52px; }
@@ -89,6 +94,6 @@ footer { min-height: 110px; display: flex; justify-content: space-between; align
 @media (max-width: 620px) {
   .page-shell { width: min(100% - 24px, 1180px); } .nav nav a:not(:last-child) { display: none; } .hero { padding-top: 72px; } h1 { font-size: 50px; } .command { width: 100%; }
   .proof-grid { grid-template-columns: 1fr; } .proof-grid article { border-right: 0; border-bottom: 1px solid var(--line); } .proof-grid article:last-child { border-bottom: 0; }
-  .section { padding: 78px 0; } .metric-stage { grid-template-columns: 1fr; gap: 35px; padding: 28px 22px; } .pipeline-note { grid-column: 1; } .benchmark-caveat a { display: block; margin: 8px 0 0; }
+  .section { padding: 78px 0; } .metric-stage { grid-template-columns: 1fr; gap: 35px; padding: 28px 22px; } .latency-stats, .pipeline-note { grid-column: 1; } .benchmark-caveat a { display: block; margin: 8px 0 0; }
   footer { padding: 30px 0; align-items: flex-start; flex-direction: column; }
 }

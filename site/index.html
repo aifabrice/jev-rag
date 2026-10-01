@@ -126,11 +126,16 @@
                 <div class="metric-row"><div><span>MRR@10</span><output id="mrr-value">0.652606</output></div><div class="bar"><i id="mrr-bar"></i></div></div>
                 <div class="metric-row"><div><span>Recall@10</span><output id="recall-value">0.220885</output></div><div class="bar"><i id="recall-bar"></i></div></div>
               </div>
-              <p id="pipeline-note" class="pipeline-note">A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning still raised cold retrieval latency to 6.99 s median.</p>
+              <div class="latency-stats" aria-label="Recorded query latency">
+                <div><span>Median latency</span><output id="latency-median">9.24 s</output></div>
+                <div><span>p95 latency</span><output id="latency-p95">38.72 s</output></div>
+                <small id="latency-basis">323-query serial estimate from matched cold stages</small>
+              </div>
+              <p id="pipeline-note" class="pipeline-note">A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning remains the dominant latency stage.</p>
             </div>
           </div>
 
-          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results, not an official MTEB submission. The headline comparison keeps one representative result in the 0.44 band and the highest measured pipeline at 0.450750. Near-duplicate and negative experiments remain in the full report for reproducibility. <a href="seven-pipelines.html">Read the seven-pipeline field report →</a> <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect the complete benchmark artifacts →</a></div>
+          <div class="benchmark-caveat"><strong>Measured, not marketed.</strong> These are project-run results, not an official MTEB submission. Latency covers retrieval and reranking, excludes one-time corpus indexing and final answer generation, and remains provider-dependent. Each selected pipeline identifies whether its latency came from a full run, cold pilot, or recorded-stage estimate. Near-duplicate and negative experiments remain in the full report for reproducibility. <a href="seven-pipelines.html">Read the seven-pipeline field report →</a> <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect the complete benchmark artifacts →</a> <a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/nfcorpus-pipeline-latency.json">Inspect latency provenance →</a></div>
         </section>
 
         <section id="architecture" class="architecture section">

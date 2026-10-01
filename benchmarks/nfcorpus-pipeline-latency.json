@@ -1,0 +1,117 @@
+{
+  "benchmark": "BEIR NFCorpus pipeline latency disclosure",
+  "dataset": "nfcorpus",
+  "split": "test",
+  "provider": "openrouter",
+  "unit": "milliseconds",
+  "measurement_scope": {
+    "includes": [
+      "per-query retrieval",
+      "online query embedding when used",
+      "Agentic planning when used",
+      "Jev reranking or decision calls when used"
+    ],
+    "excludes": [
+      "one-time corpus indexing",
+      "one-time corpus embedding build",
+      "final answer generation"
+    ],
+    "warning": "Provider latency is volatile. Full-run, cold-pilot, and stage-composed estimates are labeled separately and should not be treated as identical experimental designs."
+  },
+  "pipelines": [
+    {
+      "id": "bm25",
+      "label": "BM25 top 30",
+      "median_ms": 1.92,
+      "p95_ms": 6.6,
+      "basis": "measured",
+      "queries": 323,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-bm25-top30.json"
+    },
+    {
+      "id": "jev30",
+      "label": "BM25 top 30 + Jev",
+      "median_ms": 1075.16,
+      "p95_ms": 16952.82,
+      "basis": "observed full run",
+      "queries": 323,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-jev-openrouter-top30.json"
+    },
+    {
+      "id": "jev50",
+      "label": "BM25 top 50 + Jev",
+      "median_ms": 1921.29,
+      "p95_ms": 17839.73,
+      "basis": "observed full run",
+      "queries": 323,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-jev-openrouter-top50.json"
+    },
+    {
+      "id": "lineSearch",
+      "label": "Two-level Jev Line Search",
+      "median_ms": 11742.93,
+      "p95_ms": 35751.55,
+      "basis": "cold pilot",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-line-search-pilot10.json"
+    },
+    {
+      "id": "passageGate",
+      "label": "Hybrid + Unified Passage Gate",
+      "median_ms": 1555.05,
+      "p95_ms": 17469.24,
+      "basis": "exact cold run",
+      "queries": 323,
+      "source": "benchmarks/nfcorpus-passage-gate-summary.json"
+    },
+    {
+      "id": "agentic",
+      "label": "Agentic lexical top 50",
+      "median_ms": 6990.67,
+      "p95_ms": 24391.42,
+      "basis": "cold two-round retrieval trace",
+      "queries": 323,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-test-retrieval.json",
+      "note": "Uses the same two-round Agentic lexical branch as the standalone Agentic pipeline; the parallel dense branch does not extend the recorded critical path."
+    },
+    {
+      "id": "rrf",
+      "label": "BM25 + embedding RRF",
+      "median_ms": 1375.83,
+      "p95_ms": 1487.06,
+      "basis": "cold pilot retrieval stage",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-hybrid-text-embedding-3-large-jev-pilot10.json"
+    },
+    {
+      "id": "agenticJev",
+      "label": "Agentic lexical top 50 + Jev",
+      "median_ms": 7516.1,
+      "p95_ms": 26347.26,
+      "basis": "serial estimate from recorded planner and reranker stages",
+      "queries": 323,
+      "source": "benchmarks/nfcorpus-agentic-summary.json"
+    },
+    {
+      "id": "hybrid",
+      "label": "Hybrid top 50 + Jev",
+      "median_ms": 3167.72,
+      "p95_ms": 17991.92,
+      "basis": "per-query sum of cold retrieval and recorded Jev stages",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-hybrid-text-embedding-3-large-jev-pilot10.json"
+    },
+    {
+      "id": "agenticHybrid",
+      "label": "Agentic Hybrid + Jev/retrieval fusion",
+      "median_ms": 9241.41,
+      "p95_ms": 38719.01,
+      "basis": "per-query serial estimate from matched cold retrieval and recorded Jev stages",
+      "queries": 323,
+      "sources": [
+        ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-test-retrieval.json",
+        ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-prior-test.json"
+      ]
+    }
+  ]
+}

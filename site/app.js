@@ -1,24 +1,30 @@
 const pipelines = {
-  bm25: { label: "BM25 top 30", ndcg: 0.305654, mrr: 0.512697, recall: 0.147309, note: "SQLite FTS5/BM25 retrieves the top 30 passages with no remote model call." },
-  jev30: { label: "BM25 top 30 + Jev", ndcg: 0.353235, mrr: 0.585817, recall: 0.158667, note: "Jev reranks the same 30 lexical candidates, improving all three recorded metrics." },
-  jev50: { label: "BM25 top 50 + Jev", ndcg: 0.362468, mrr: 0.593023, recall: 0.164474, note: "A wider BM25 candidate pool gives Jev more evidence to recover before the top 10 cutoff." },
-  lineSearch: { label: "Two-level Jev Line Search", ndcg: 0.366280, mrr: 0.657660, recall: 0.169397, note: "The best first-hit behavior, but weaker multi-document ranking than Agentic or Hybrid; 5,168 Jev requests cost $4.553288 in the full run." },
-  passageGate: { label: "Hybrid + Unified Passage Gate", ndcg: 0.376298, mrr: 0.618043, recall: 0.166977, note: "A disclosed negative result: fixed thresholds excluded 84.4% of candidates. Useful to study injection and premise routing, but weaker than bare Hybrid and ordinary Jev reranking." },
-  agentic: { label: "Agentic lexical top 50", ndcg: 0.380168, mrr: 0.597940, recall: 0.185464, note: "Generated lexical search terms expand the local FTS5 search without creating embeddings." },
-  rrf: { label: "BM25 + embedding RRF", ndcg: 0.396712, mrr: 0.632089, recall: 0.193977, note: "Reciprocal-rank fusion combines BM25 top 50 with embedding top 50 before reranking." },
-  agenticJev: { label: "Agentic lexical top 50 + Jev", ndcg: 0.430969, mrr: 0.644041, recall: 0.204138, note: "Agent-generated search terms widen local recall, then Jev reranks the top 50 passages." },
-  hybrid: { label: "Hybrid top 50 + Jev", ndcg: 0.444327, mrr: 0.654583, recall: 0.214907, note: "BM25 and embedding rankings are fused with RRF before Jev reranks the evidence." },
-  agenticHybrid: { label: "Agentic Hybrid + Jev/retrieval fusion", ndcg: 0.450750, mrr: 0.652606, recall: 0.220885, note: "A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning still raised cold retrieval latency to 6.99 s median." },
+  bm25: { label: "BM25 top 30", ndcg: 0.305654, mrr: 0.512697, recall: 0.147309, medianMs: 1.92, p95Ms: 6.60, latencyBasis: "323-query local run", note: "SQLite FTS5/BM25 retrieves the top 30 passages with no remote model call." },
+  jev30: { label: "BM25 top 30 + Jev", ndcg: 0.353235, mrr: 0.585817, recall: 0.158667, medianMs: 1075.16, p95Ms: 16952.82, latencyBasis: "323-query observed run", note: "Jev reranks the same 30 lexical candidates, improving all three recorded metrics." },
+  jev50: { label: "BM25 top 50 + Jev", ndcg: 0.362468, mrr: 0.593023, recall: 0.164474, medianMs: 1921.29, p95Ms: 17839.73, latencyBasis: "323-query observed run", note: "A wider BM25 candidate pool gives Jev more evidence to recover before the top 10 cutoff." },
+  lineSearch: { label: "Two-level Jev Line Search", ndcg: 0.366280, mrr: 0.657660, recall: 0.169397, medianMs: 11742.93, p95Ms: 35751.55, latencyBasis: "10-query cold pilot", note: "The best first-hit behavior, but weaker multi-document ranking than Agentic or Hybrid; 5,168 Jev requests cost $4.553288 in the full run." },
+  passageGate: { label: "Hybrid + Unified Passage Gate", ndcg: 0.376298, mrr: 0.618043, recall: 0.166977, medianMs: 1555.05, p95Ms: 17469.24, latencyBasis: "323-query cold run", note: "A disclosed negative result: fixed thresholds excluded 84.4% of candidates. Useful to study injection and premise routing, but weaker than bare Hybrid and ordinary Jev reranking." },
+  agentic: { label: "Agentic lexical top 50", ndcg: 0.380168, mrr: 0.597940, recall: 0.185464, medianMs: 6990.67, p95Ms: 24391.42, latencyBasis: "323-query cold two-round retrieval trace", note: "Generated lexical search terms expand the local FTS5 search without creating embeddings." },
+  rrf: { label: "BM25 + embedding RRF", ndcg: 0.396712, mrr: 0.632089, recall: 0.193977, medianMs: 1375.83, p95Ms: 1487.06, latencyBasis: "10-query cold pilot", note: "Reciprocal-rank fusion combines BM25 top 50 with embedding top 50 before reranking." },
+  agenticJev: { label: "Agentic lexical top 50 + Jev", ndcg: 0.430969, mrr: 0.644041, recall: 0.204138, medianMs: 7516.10, p95Ms: 26347.26, latencyBasis: "323-query serial estimate from recorded stages", note: "Agent-generated search terms widen local recall, then Jev reranks the top 50 passages." },
+  hybrid: { label: "Hybrid top 50 + Jev", ndcg: 0.444327, mrr: 0.654583, recall: 0.214907, medianMs: 3167.72, p95Ms: 17991.92, latencyBasis: "10-query cold component sum", note: "BM25 and embedding rankings are fused with RRF before Jev reranks the evidence." },
+  agenticHybrid: { label: "Agentic Hybrid + Jev/retrieval fusion", ndcg: 0.450750, mrr: 0.652606, recall: 0.220885, medianMs: 9241.41, p95Ms: 38719.01, latencyBasis: "323-query serial estimate from matched cold stages", note: "A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning remains the dominant latency stage." },
 };
 const fields = {
   label: document.querySelector("#selected-label"), score: document.querySelector("#selected-score"),
   ndcg: document.querySelector("#ndcg-value"), mrr: document.querySelector("#mrr-value"), recall: document.querySelector("#recall-value"),
+  median: document.querySelector("#latency-median"), p95: document.querySelector("#latency-p95"), latencyBasis: document.querySelector("#latency-basis"),
   ndcgBar: document.querySelector("#ndcg-bar"), mrrBar: document.querySelector("#mrr-bar"), recallBar: document.querySelector("#recall-bar"), note: document.querySelector("#pipeline-note"),
 };
+function formatLatency(milliseconds) {
+  if (milliseconds < 1000) return `${milliseconds.toFixed(milliseconds < 10 ? 2 : 0)} ms`;
+  return `${(milliseconds / 1000).toFixed(2)} s`;
+}
 function renderPipeline(key) {
   const p = pipelines[key];
   fields.label.textContent = p.label; fields.score.textContent = p.ndcg.toFixed(6);
   fields.ndcg.textContent = p.ndcg.toFixed(6); fields.mrr.textContent = p.mrr.toFixed(6); fields.recall.textContent = p.recall.toFixed(6);
+  fields.median.textContent = formatLatency(p.medianMs); fields.p95.textContent = formatLatency(p.p95Ms); fields.latencyBasis.textContent = p.latencyBasis;
   fields.ndcgBar.style.width = `${p.ndcg * 100}%`; fields.mrrBar.style.width = `${p.mrr * 100}%`; fields.recallBar.style.width = `${p.recall * 100}%`; fields.note.textContent = p.note;
   document.querySelectorAll(".pipeline-option").forEach((button) => { const active = button.dataset.pipeline === key; button.classList.toggle("active", active); button.setAttribute("aria-selected", active ? "true" : "false"); });
 }

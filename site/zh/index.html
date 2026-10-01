@@ -79,18 +79,18 @@
           <h2>完整 BEIR NFCorpus 测试集。</h2>
           <p>项目使用 3,633 篇文档和 323 个测试问题，所有方案共享相同语料、query、qrels 与指标实现。</p>
           <table>
-            <thead><tr><th>检索流程</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th></tr></thead>
+            <thead><tr><th>检索流程</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th><th>中位延迟</th><th>P95</th></tr></thead>
             <tbody>
-              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td></tr>
-              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td></tr>
-              <tr><td>两级 Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td></tr>
-              <tr><td>Hybrid top 50 + 统一 Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td></tr>
-              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
-              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td><strong>0.654583</strong></td><td>0.214907</td></tr>
-              <tr><td><strong>Agentic Hybrid + Jev/原召回排名融合</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td></tr>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td><td>1.92 ms</td><td>6.60 ms</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td><td>1.08 秒</td><td>16.95 秒</td></tr>
+              <tr><td>两级 Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td><td>11.74 秒</td><td>35.75 秒</td></tr>
+              <tr><td>Hybrid top 50 + 统一 Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td><td>1.56 秒</td><td>17.47 秒</td></tr>
+              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>7.52 秒</td><td>26.35 秒</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td><strong>0.654583</strong></td><td>0.214907</td><td>3.17 秒</td><td>17.99 秒</td></tr>
+              <tr><td><strong>Agentic Hybrid + Jev/原召回排名融合</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>9.24 秒</td><td>38.72 秒</td></tr>
             </tbody>
           </table>
-          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。主表在 0.44 区间只保留一个代表性方案，以及当前最高分 0.450750；相近分数和负结果仍在完整报告中披露。</p>
+          <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。延迟仅包含检索和重排，不包含一次性建库与最终回答生成；昂贵的远程方案使用冷启动小样本或逐 query 阶段估算，实际值会随供应商负载变化。</p>
           <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">查看完整配置、费用、限制和复现命令 →</a></p>
         </section>
 

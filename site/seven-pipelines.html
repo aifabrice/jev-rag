@@ -59,22 +59,23 @@
           <p class="kicker">Measured results</p>
           <h2>The candidate pool sets the ceiling.</h2>
           <table>
-            <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th></tr></thead>
+            <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th><th>Median latency</th><th>p95 latency</th></tr></thead>
             <tbody>
-              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td></tr>
-              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td></tr>
-              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>0.593023</td><td>0.164474</td></tr>
-              <tr><td>Two-level Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td></tr>
-              <tr><td>Hybrid + Unified Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td></tr>
-              <tr><td>Agentic lexical top 50</td><td>0.380168</td><td>0.597940</td><td>0.185464</td></tr>
-              <tr><td>BM25 + embedding RRF top 50</td><td>0.396712</td><td>0.632089</td><td>0.193977</td></tr>
-              <tr><td>Multi-round Agentic Hybrid top 50</td><td>0.424145</td><td>0.637722</td><td>0.206303</td></tr>
-              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
-              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td></tr>
-              <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td></tr>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td><td>1.92 ms</td><td>6.60 ms</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td><td>1.08 s</td><td>16.95 s</td></tr>
+              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>0.593023</td><td>0.164474</td><td>1.92 s</td><td>17.84 s</td></tr>
+              <tr><td>Two-level Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td><td>11.74 s</td><td>35.75 s</td></tr>
+              <tr><td>Hybrid + Unified Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td><td>1.56 s</td><td>17.47 s</td></tr>
+              <tr><td>Agentic lexical top 50</td><td>0.380168</td><td>0.597940</td><td>0.185464</td><td>6.99 s</td><td>24.39 s</td></tr>
+              <tr><td>BM25 + embedding RRF top 50</td><td>0.396712</td><td>0.632089</td><td>0.193977</td><td>1.38 s</td><td>1.49 s</td></tr>
+              <tr><td>Multi-round Agentic Hybrid top 50</td><td>0.424145</td><td>0.637722</td><td>0.206303</td><td>6.99 s</td><td>24.39 s</td></tr>
+              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>7.52 s</td><td>26.35 s</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td><td>3.17 s</td><td>17.99 s</td></tr>
+              <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>9.24 s</td><td>38.72 s</td></tr>
             </tbody>
           </table>
-          <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect exact configuration, cost, caveats, and reproduction commands →</a></p>
+          <p class="source-note">Latency covers retrieval and reranking only. One-time corpus indexing and final answer generation are excluded. Expensive remote pipelines use labeled cold pilots or per-query stage estimates, and provider latency can change.</p>
+          <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect exact configuration, cost, caveats, and reproduction commands →</a> <a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/nfcorpus-pipeline-latency.json">Inspect latency provenance →</a></p>
         </section>
 
         <section class="question-list" aria-label="Seven Jev RAG pipelines">
