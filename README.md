@@ -16,6 +16,7 @@ passages are sent to the configured Jev and answer-model providers.
 [简体中文](README.zh-CN.md) · [Seven-pipeline field report](docs/JEV_RAG_SEVEN_PIPELINES.md) · [Architecture](docs/ARCHITECTURE.md) · [AI search discoverability](docs/AI_DISCOVERABILITY.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 **[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
+· [How to use Jev for RAG](https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html)
 · [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)
 · [Machine-readable project facts](https://aifabrice.github.io/jev-rag/llms.txt)
 

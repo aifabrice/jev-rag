@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How to use Jev for RAG: BM25 retrieval, Jev reranking and cited answers</title>
+    <meta name="description" content="Build a Jev RAG pipeline over local files: retrieve with SQLite BM25, rerank a bounded candidate set with Jev, and generate cited answers without requiring a vector database." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="keywords" content="how to use Jev for RAG, Jev RAG tutorial, Jev reranker, BM25 Jev reranking, RAG without vector database, local knowledge search" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html" />
+    <meta property="og:title" content="How to use Jev for RAG: a practical local-search pipeline" />
+    <meta property="og:description" content="A reproducible tutorial for SQLite BM25 retrieval, bounded Jev reranking, and cited answers over local documents." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "HowTo",
+            "name": "How to use Jev for RAG",
+            "description": "Index local documents with SQLite FTS5, retrieve candidates with BM25, rerank evidence with Jev, and stream a cited answer.",
+            "url": "https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html",
+            "datePublished": "2026-10-01",
+            "dateModified": "2026-10-01",
+            "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
+            "tool": ["Python 3.9+", "Jev API access", "OpenRouter API access"],
+            "step": [
+              {"@type": "HowToStep", "name": "Configure provider keys", "text": "Copy .env.example to .env and configure the providers used for reranking and answer generation."},
+              {"@type": "HowToStep", "name": "Index a local folder", "text": "Run jev-rag index against the document directory. The default pipeline creates a local SQLite FTS5 index."},
+              {"@type": "HowToStep", "name": "Run BM25 plus Jev", "text": "Start the local server or run a CLI search. BM25 retrieves a bounded candidate set and Jev reranks those passages."},
+              {"@type": "HowToStep", "name": "Measure on your corpus", "text": "Compare BM25-only and Jev-reranked results, inspect citations, latency, provider cost, and queries where the candidate set misses evidence."}
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Can I use Jev for RAG without a vector database?",
+                "acceptedAnswer": {"@type": "Answer", "text": "Yes. Jev RAG retrieves candidates from a local SQLite FTS5/BM25 index and sends only the bounded candidate passages to Jev for reranking. Embeddings and a vector database are optional."}
+              },
+              {
+                "@type": "Question",
+                "name": "Does Jev replace the retriever or answer model?",
+                "acceptedAnswer": {"@type": "Answer", "text": "No. In the default pipeline BM25 retrieves candidates, Jev judges and orders evidence, and a separate answer model writes the cited response."}
+              },
+              {
+                "@type": "Question",
+                "name": "How many passages should Jev rerank?",
+                "acceptedAnswer": {"@type": "Answer", "text": "Start with a bounded candidate set and measure recall, cost, and latency on representative queries. Jev RAG defaults to up to 30 BM25 candidates and batches ten candidates per request."}
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="./">Home</a><a href="jev-rag-use-cases.html">Use cases</a><a href="seven-pipelines.html">Benchmark</a><a href="faq.html">FAQ</a><a href="zh/jev-rag-guide.html" lang="zh-CN">中文</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG</a> / Tutorial</p>
+        <p class="eyebrow"><span></span> Practical Jev RAG tutorial</p>
+        <h1>How to use Jev<br /><em>for RAG.</em></h1>
+        <p class="lede">Use a fast local retriever to find a bounded candidate set, let Jev judge which passages support the question, then ask a separate answer model to write only from the retained evidence. The default path needs no embeddings and no vector database.</p>
+
+        <section>
+          <p class="kicker">Direct answer</p>
+          <h2>Where does Jev fit in a RAG pipeline?</h2>
+          <p><strong>Jev fits between retrieval and generation.</strong> SQLite FTS5/BM25 retrieves up to 30 candidate passages from local files. Jev receives the question and those candidates, returns calibrated evidence scores, and the application sorts them. MiniMax then streams a cited answer from up to ten retained passages.</p>
+          <p class="source-note">The local index stays on your machine, but selected passage text is sent to the configured Jev provider and answer model. This is local-first, not fully offline.</p>
+        </section>
+
+        <section>
+          <p class="kicker">1 · Install and configure</p>
+          <h2>Start with the smallest working path.</h2>
+          <p>Clone the repository, create an isolated Python environment, install the package, and copy the example environment file. Keep <code>.env</code> out of version control.</p>
+          <pre class="command"><code>git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+cp .env.example .env</code></pre>
+          <p>Configure the provider credentials described in the <a href="https://github.com/aifabrice/jev-rag#configuration">README</a>. The default answer path uses OpenRouter; Jev can run through the configured TypeSafe or OpenRouter route.</p>
+        </section>
+
+        <section>
+          <p class="kicker">2 · Index local files</p>
+          <h2>BM25 needs searchable passages, not embeddings.</h2>
+          <p>Point the CLI at a document folder. Markdown, text, HTML, JSON, CSV, YAML, DOCX, and PDF files are supported. The index is a local SQLite database.</p>
+          <pre class="command"><code>jev-rag \
+  --documents /absolute/path/to/documents \
+  --db .knowledge/documents.db \
+  index --rebuild</code></pre>
+          <p>Short files can stay whole. Large files should normally use the default heading-aware passage splitting so retrieval, reranking, and citations operate on focused evidence. Use <code>--chunking none</code> only when whole-file records match your corpus and evaluation.</p>
+        </section>
+
+        <section>
+          <p class="kicker">3 · Retrieve, rerank, answer</p>
+          <h2>Run BM25 + Jev before adding more infrastructure.</h2>
+          <pre class="command"><code>jev-rag \
+  --documents /absolute/path/to/documents \
+  --db .knowledge/documents.db \
+  serve</code></pre>
+          <p>Open <code>http://127.0.0.1:8765</code>. The default mode runs local BM25 retrieval, batches up to ten candidates per Jev request, keeps the evidence order in application code, and streams the final cited answer.</p>
+          <p>You can also compare the stages from the CLI:</p>
+          <pre class="command"><code># Local lexical baseline; no Jev request
+jev-rag search 'your question' --no-jev
+
+# Default BM25 candidate retrieval followed by Jev
+jev-rag search 'your question'
+
+# Machine-readable evidence and timing
+jev-rag search 'your question' --json</code></pre>
+        </section>
+
+        <section>
+          <p class="kicker">4 · Know what Jev can and cannot fix</p>
+          <h2>Reranking improves order, not missing recall.</h2>
+          <div class="question-list">
+            <article class="question-card">
+              <h3>Use BM25 + Jev when</h3>
+              <p>Your documents contain exact product names, identifiers, technical terms, or overlapping query language. It is fast, inspectable, and avoids an embedding index.</p>
+            </article>
+            <article class="question-card">
+              <h3>Add agentic lexical search when</h3>
+              <p>The query needs several alternate lexical searches but you still do not want a document embedding index. The planner proposes searches; code executes and fuses them locally.</p>
+            </article>
+            <article class="question-card">
+              <h3>Add hybrid retrieval when</h3>
+              <p>Synonyms and paraphrases cause BM25 to miss the right evidence. Embedding candidates widen recall before the same Jev reranking stage.</p>
+            </article>
+          </div>
+        </section>
+
+        <section>
+          <p class="kicker">Measured result</p>
+          <h2>Jev improved the BM25 shortlist; wider recall improved it further.</h2>
+          <table>
+            <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>What changed</th></tr></thead>
+            <tbody>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>Local lexical baseline</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>Same candidates, Jev reranking</td></tr>
+              <tr><td>Agentic lexical + Jev</td><td>0.430969</td><td>Wider lexical recall, then Jev</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>Lexical + semantic recall, then Jev</td></tr>
+            </tbody>
+          </table>
+          <p>These are project-run results on the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. They are not an official MTEB submission. Reproduce the commands and test your own corpus before choosing a pipeline.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Evaluation checklist</p>
+          <h2>Measure the whole retrieval path.</h2>
+          <ol>
+            <li>Check whether the answer-bearing passage appears in the BM25 candidate set.</li>
+            <li>Compare its rank before and after Jev.</li>
+            <li>Track first-token latency, total answer time, provider calls, and cost.</li>
+            <li>Inspect whether every answer claim points to a retained source passage.</li>
+            <li>Keep failed queries; they tell you whether to improve chunking, retrieval recall, reranking policy, or generation.</li>
+          </ol>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run the tutorial</a><a class="button secondary" href="seven-pipelines.html">Compare all pipelines</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent open-source project.</span><span>Published 2026-10-01 · MIT licensed</span></footer>
+    </div>
+  </body>
+</html>
