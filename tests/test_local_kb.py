@@ -155,6 +155,9 @@ class WebAppTests(unittest.TestCase):
         self.assertIn('<textarea id="q"', WEB_APP)
         self.assertIn('class="index-status"', WEB_APP)
         self.assertIn("Number(v)>0", WEB_APP)
+        self.assertIn("white-space:nowrap", WEB_APP)
+        self.assertNotIn('data-i18n="heroSubtitle"', WEB_APP)
+        self.assertIn("currentLanguage==='zh-CN'?'提问':'Ask'", WEB_APP)
 
     def test_web_app_supports_persisted_chinese_and_english_ui(self):
         self.assertIn('data-language="zh-CN"', WEB_APP)
