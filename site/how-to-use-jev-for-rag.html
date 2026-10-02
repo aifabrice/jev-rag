@@ -29,7 +29,7 @@
             "description": "Index local documents with SQLite FTS5, retrieve candidates with BM25, rerank evidence with Jev, and stream a cited answer.",
             "url": "https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html",
             "datePublished": "2026-10-01",
-            "dateModified": "2026-10-01",
+            "dateModified": "2026-10-02",
             "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
             "tool": ["Python 3.9+", "Jev API access", "OpenRouter API access"],
             "step": [
@@ -75,6 +75,7 @@
         <p class="eyebrow"><span></span> Practical Jev RAG tutorial</p>
         <h1>How to use Jev<br /><em>for RAG.</em></h1>
         <p class="lede">Use a fast local retriever to find a bounded candidate set, let Jev judge which passages support the question, then ask a separate answer model to write only from the retained evidence. The default path needs no embeddings and no vector database.</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Inspect the 323-query benchmark</a></div>
 
         <section>
           <p class="kicker">Direct answer</p>
@@ -170,7 +171,7 @@ jev-rag search 'your question' --json</code></pre>
             <li>Inspect whether every answer claim points to a retained source passage.</li>
             <li>Keep failed queries; they tell you whether to improve chunking, retrieval recall, reranking policy, or generation.</li>
           </ol>
-          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run the tutorial</a><a class="button secondary" href="seven-pipelines.html">Compare all pipelines</a></div>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Compare all pipelines</a></div>
         </section>
       </main>
 

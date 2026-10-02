@@ -28,7 +28,7 @@
             "description": "A problem-first guide to choosing Jev RAG for six developer and knowledge-search use cases.",
             "url": "https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html",
             "datePublished": "2026-09-30",
-            "dateModified": "2026-10-01",
+            "dateModified": "2026-10-02",
             "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
             "publisher": {"@type": "Organization", "name": "Jev RAG", "url": "https://aifabrice.github.io/jev-rag/"},
             "about": ["Jev RAG", "retrieval-augmented generation", "local knowledge search", "BM25", "reranking", "agentic search"]
@@ -69,6 +69,7 @@
         <p class="eyebrow"><span></span> Problem-first project guide</p>
         <h1>Different users,<br /><em>different retrieval failures.</em></h1>
         <p class="lede">Jev RAG is not one universal recipe. It is a local knowledge-search application and evaluation harness with seven selectable paths. Start from the failure you need to fix: exact-term recall, vocabulary mismatch, evidence ordering, agent search planning, or retrieval evaluation.</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Try Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Inspect the benchmark</a></div>
 
         <section>
           <p class="kicker">Direct answer</p>
@@ -141,7 +142,7 @@
           <p class="kicker">What it does not replace</p>
           <h2>Retrieval, judgment and generation remain separate.</h2>
           <p>Jev does not generate the final answer and does not make a weak candidate pool complete. The retriever determines which evidence can be judged. Jev scores or selects within a bounded state. The answer model writes from the retained evidence. Keeping those stages separate makes failures measurable and lets you change one layer without pretending the whole system improved.</p>
-          <div class="hero-actions"><a class="button primary" href="how-to-use-jev-for-rag.html">Follow the Jev RAG tutorial</a><a class="button secondary" href="seven-pipelines.html">Compare all seven pipelines</a></div>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="how-to-use-jev-for-rag.html">Follow the tutorial</a></div>
         </section>
       </main>
 
