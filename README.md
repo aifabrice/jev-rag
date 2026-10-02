@@ -21,6 +21,29 @@ passages are sent to the configured Jev and answer-model providers.
 · [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)
 · [Machine-readable project facts](https://aifabrice.github.io/jev-rag/llms.txt)
 
+![Jev RAG local web interface](docs/assets/demo-ui.png)
+
+## Run it locally
+
+```bash
+git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[documents]'
+cp .env.example .env  # add OPENROUTER_API_KEY
+jev-rag serve
+```
+
+Open <http://127.0.0.1:8765>. Jev RAG discovers `~/Documents` by default,
+builds the local BM25 index, and opens the English/Chinese search interface.
+Use `--documents /absolute/path` to point it at another folder.
+
+**Why try it:** the default path needs no embeddings or vector database; all
+seven retrieval pipelines are selectable in the same UI; and the repository
+publishes quality, latency, cost, and negative benchmark results instead of a
+single best score.
+
 ## Public benchmark
 
 Complete BEIR NFCorpus test split: 3,633 documents and 323 queries. All rows
@@ -83,8 +106,6 @@ configuration was evaluated on the same test set.
 · [Machine-readable Passage Gate summary](benchmarks/nfcorpus-passage-gate-summary.json)
 · [Machine-readable Taxonomy summary](benchmarks/nfcorpus-taxonomy-summary.json)
 · [Machine-readable Agentic Hybrid summary](benchmarks/nfcorpus-agentic-hybrid-summary.json)
-
-![Jev RAG local web interface](docs/assets/demo-ui.png)
 
 ```text
 default: local files -> SQLite BM25 ----------------------> Jev -> MiniMax
