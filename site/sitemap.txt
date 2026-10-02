@@ -1,6 +1,7 @@
 https://aifabrice.github.io/jev-rag/
 https://aifabrice.github.io/jev-rag/faq.html
 https://aifabrice.github.io/jev-rag/seven-pipelines.html
+https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html
 https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html
 https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html
 https://aifabrice.github.io/jev-rag/jevrag.html

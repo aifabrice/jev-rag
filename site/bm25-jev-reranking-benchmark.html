@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BM25 + Jev reranking without a vector database: 323-query benchmark</title>
+    <meta name="description" content="A reproducible 323-query benchmark of BM25, Jev reranking, agentic lexical search and hybrid retrieval for RAG, including measured gains and a negative result." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <link rel="canonical" href="https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html" />
+    <link rel="alternate" hreflang="en" href="https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html" />
+    <meta property="og:title" content="BM25 + Jev reranking without a vector database" />
+    <meta property="og:description" content="What changed across six retrieval paths on all 323 NFCorpus test queries—and why reranking cannot repair missing candidates." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/aifabrice/jev-rag/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "BM25 + Jev reranking without a vector database: a 323-query RAG benchmark",
+        "description": "A reproducible comparison of BM25, Jev reranking, agentic lexical search and hybrid retrieval on the complete BEIR NFCorpus test split.",
+        "url": "https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html",
+        "datePublished": "2026-10-02",
+        "dateModified": "2026-10-02",
+        "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
+        "publisher": {"@type": "Organization", "name": "Jev RAG", "url": "https://aifabrice.github.io/jev-rag/"},
+        "about": ["Jev RAG", "BM25", "reranking", "retrieval-augmented generation", "information retrieval", "NFCorpus"]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Jev RAG home"><span class="brand-mark" aria-hidden="true">J</span><span>Jev RAG</span></a>
+        <nav><a href="./">Home</a><a href="how-to-use-jev-for-rag.html">Tutorial</a><a href="seven-pipelines.html">Benchmark</a><a href="jev-rag-use-cases.html">Use cases</a><a href="faq.html">FAQ</a><a href="https://github.com/aifabrice/jev-rag">GitHub</a></nav>
+      </header>
+
+      <main class="content-page">
+        <p class="breadcrumbs"><a href="./">Jev RAG</a> / Benchmark field note</p>
+        <p class="eyebrow"><span></span> Complete 323-query evaluation</p>
+        <h1>BM25 + Jev reranking,<br /><em>without a vector database.</em></h1>
+        <p class="lede">Most RAG stacks begin by adding embeddings and a vector database. This benchmark asks a narrower question: how far can a transparent local retriever go when Jev judges its evidence before generation?</p>
+        <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Open the interactive benchmark</a></div>
+
+        <section>
+          <p class="kicker">The smallest path</p>
+          <h2>Keep retrieval, judgment and generation separate.</h2>
+          <ol>
+            <li>SQLite FTS5/BM25 searches local files.</li>
+            <li>Up to 30 passages become a bounded candidate set.</li>
+            <li>Jev judges whether each passage contains evidence for the question.</li>
+            <li>Application code sorts the returned probabilities.</li>
+            <li>A separate answer model writes from retained passages and cites the files.</li>
+          </ol>
+          <p>There is no vector database in the default path. Embeddings remain available as an optional retrieval path when lexical recall is not enough.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Measured result</p>
+          <h2>Reranking helped; wider recall helped more.</h2>
+          <p>The evaluation uses the complete BEIR NFCorpus test split: 3,633 documents and 323 queries. Every path uses the same qrels and metric code. The primary metric is nDCG@10.</p>
+          <table>
+            <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>Change from BM25 top 30</th></tr></thead>
+            <tbody>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>Baseline</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>+15.57%</td></tr>
+              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>+18.59%</td></tr>
+              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>+41.00%</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>+45.37%</td></tr>
+              <tr><td>Agentic Hybrid + rank fusion</td><td>0.450750</td><td>+47.47%</td></tr>
+            </tbody>
+          </table>
+          <p class="source-note">These are project-run results, not an official MTEB submission. Reproduce the comparison and evaluate it on your own corpus before choosing a pipeline.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Clean comparison</p>
+          <h2>Jev improved the order of the same BM25 candidate pool.</h2>
+          <p>BM25 top 30 and BM25 top 30 + Jev use the same candidates. Jev raised nDCG@10 from 0.305654 to 0.353235, a 15.57% relative gain. That isolates the contribution of reranking from changes in first-stage recall.</p>
+          <p>The larger gains came from widening the candidate pool before Jev. Agentic lexical search generates several bounded searches, executes them locally, fuses the results, and then sends the shortlist to Jev. It reached 0.430969 without maintaining a document embedding index.</p>
+          <p>The highest point estimate came from Agentic Hybrid with local rank fusion at 0.450750. That path adds online planning and embedding retrieval, so the highest score is not automatically the best operational choice.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Failure diagnosis</p>
+          <h2>Reranking cannot repair a missing candidate.</h2>
+          <p>Jev can improve the order of passages that the retriever found. It cannot judge a passage that never entered the candidate set. That gives each failure a different repair:</p>
+          <ul>
+            <li>If the answer-bearing passage is absent, improve retrieval recall, query planning, or chunking.</li>
+            <li>If the passage is present but ranked too low, improve reranking.</li>
+            <li>If the right evidence is retained but the answer is wrong, inspect the answer prompt and generation stage.</li>
+          </ul>
+        </section>
+
+        <section>
+          <p class="kicker">Negative result</p>
+          <h2>A more elaborate Jev program was not automatically better.</h2>
+          <p>A unified Jev Passage Gate combined relevance and policy-style questions in one fixed gate. It reached 0.376298 nDCG@10 and excluded 84.4% of candidates. That was worse than the stronger retrieval-plus-reranking paths.</p>
+          <p>Publishing the miss matters: questions and thresholds need calibration against the target corpus. Complexity by itself is not an improvement.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Data boundary</p>
+          <h2>Local-first does not mean fully offline.</h2>
+          <p>Source files, the SQLite index, and lexical retrieval stay on the machine. In the default hosted-provider configuration, selected passage text is sent to the Jev provider, and retained evidence is sent to the answer model. If documents must never leave the machine, replace those stages with local models.</p>
+        </section>
+
+        <section>
+          <p class="kicker">Practical choice</p>
+          <h2>Start with the smallest path that addresses the failure.</h2>
+          <p>Test BM25 + Jev first when the corpus contains product names, identifiers, technical terms, code symbols, or other language that overlaps with user queries. Add agentic lexical search when several exact-term searches are needed but you still want to avoid a document embedding index. Add hybrid retrieval when synonyms and paraphrases make lexical recall fail.</p>
+          <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Reproduce it locally</a><a class="button secondary" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect the full report</a></div>
+        </section>
+      </main>
+
+      <footer><span>Jev RAG is an independent open-source project.</span><span>Published 2026-10-02 · MIT licensed</span></footer>
+    </div>
+  </body>
+</html>
