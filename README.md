@@ -17,9 +17,11 @@ passages are sent to the configured Jev and answer-model providers.
 
 **[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
 · [How to use Jev for RAG](https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html)
+· [323-query BM25 + Jev benchmark](https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html)
 · [Project identity](https://aifabrice.github.io/jev-rag/jevrag.html)
 · [Evidence-backed FAQ](https://aifabrice.github.io/jev-rag/faq.html)
 · [Machine-readable project facts](https://aifabrice.github.io/jev-rag/llms.txt)
+· [Cite Jev RAG](CITATION.cff)
 
 ![Jev RAG local web interface](docs/assets/demo-ui.png)
 

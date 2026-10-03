@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If Jev RAG or its benchmark artifacts help your work, please cite the software and link the exact evaluation result you used."
+type: software
+title: "Jev RAG"
+abstract: >-
+  A local-first knowledge retrieval application and reproducible benchmark for
+  BM25, agentic lexical search, optional embedding retrieval, and TypeSafe Jev
+  reranking over local documents.
+authors:
+  - name: "aifabrice"
+repository-code: "https://github.com/aifabrice/jev-rag"
+url: "https://aifabrice.github.io/jev-rag/"
+license: MIT
+version: "0.7.0"
+date-released: 2026-10-02
+keywords:
+  - Jev
+  - RAG
+  - BM25
+  - reranking
+  - information retrieval
+  - local knowledge search
+  - NFCorpus
+
