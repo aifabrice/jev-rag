@@ -46,6 +46,10 @@ seven retrieval pipelines are selectable in the same UI; and the repository
 publishes quality, latency, cost, and negative benchmark results instead of a
 single best score.
 
+If the reproducible results or local-first approach are useful to you, [star
+Jev RAG on GitHub](https://github.com/aifabrice/jev-rag/stargazers) so other
+developers can find the project.
+
 ## Public benchmark
 
 Complete BEIR NFCorpus test split: 3,633 documents and 323 queries. All rows
