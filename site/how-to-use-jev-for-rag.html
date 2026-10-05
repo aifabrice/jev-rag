@@ -84,6 +84,17 @@
           <p class="source-note">The local index stays on your machine, but selected passage text is sent to the configured Jev provider and answer model. This is local-first, not fully offline.</p>
         </section>
 
+        <section id="no-key-demo">
+          <p class="kicker">0 · Try local retrieval without a key</p>
+          <h2>Search public docs before connecting a model.</h2>
+          <p>This Python 3.9+ demo uses only the repository's public <code>docs/</code> folder and a separate SQLite database. It does not scan your personal Documents folder, require package installation, or make a model request. SQLite FTS5 must be available.</p>
+          <pre class="command"><code>git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db index
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db search 'retrieval' --no-jev</code></pre>
+          <p>Expect ranked passages, source paths, and retrieval timing. This is the <strong>BM25-only baseline</strong>, not Jev reranking or a generated answer. Keep both folder and database arguments on every command. Once this works, continue with provider setup for the full pipeline.</p>
+        </section>
+
         <section>
           <p class="kicker">1 · Install and configure</p>
           <h2>Start with the smallest working path.</h2>
@@ -94,7 +105,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 cp .env.example .env</code></pre>
-          <p>Configure the provider credentials described in the <a href="https://github.com/aifabrice/jev-rag#configuration">README</a>. The default answer path uses OpenRouter; Jev can run through the configured TypeSafe or OpenRouter route.</p>
+          <p>Configure the provider credentials described in the <a href="https://github.com/aifabrice/jev-rag#install">README</a>. The default answer path uses OpenRouter; Jev can run through the configured TypeSafe or OpenRouter route.</p>
         </section>
 
         <section>
@@ -118,13 +129,13 @@ cp .env.example .env</code></pre>
           <p>Open <code>http://127.0.0.1:8765</code>. The default mode runs local BM25 retrieval, batches up to ten candidates per Jev request, keeps the evidence order in application code, and streams the final cited answer.</p>
           <p>You can also compare the stages from the CLI:</p>
           <pre class="command"><code># Local lexical baseline; no Jev request
-jev-rag search 'your question' --no-jev
+jev-rag --documents /absolute/path/to/documents --db .knowledge/documents.db search 'your question' --no-jev
 
 # Default BM25 candidate retrieval followed by Jev
-jev-rag search 'your question'
+jev-rag --documents /absolute/path/to/documents --db .knowledge/documents.db search 'your question'
 
 # Machine-readable evidence and timing
-jev-rag search 'your question' --json</code></pre>
+jev-rag --documents /absolute/path/to/documents --db .knowledge/documents.db search 'your question' --json</code></pre>
         </section>
 
         <section>

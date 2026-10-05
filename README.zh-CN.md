@@ -132,6 +132,23 @@ Jev 窗口 Choice，再对每个窗口的优胜文段执行第二级全局 Choic
 
 这是一种有意识的检索架构选择，不是宣称关键词检索永远优于向量检索。请用自己的文档和问题进行测试。
 
+## 无需 API Key，先试本地检索
+
+先使用仓库自带的公开文档验证 BM25 检索，只需要带 SQLite FTS5 的
+Python 3.9+，无需安装依赖、配置 Key、生成向量或请求模型。
+下面仅索引 `./docs`，不会扫描你的个人 Documents 目录。
+
+```bash
+git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db index
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db search 'retrieval' --no-jev
+```
+
+结果包含排序后的文段、来源路径和检索耗时。这只是 **BM25 基线**，
+不包含 Jev 重排或大模型回答。两条命令请保留相同的 `--documents` 和
+`--db`，该演示数据库与默认知识库分开。完整问答流程请继续按下面配置。
+
 ## 安装
 
 ```bash

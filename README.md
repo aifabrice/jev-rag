@@ -26,6 +26,24 @@ passages are sent to the configured Jev and answer-model providers.
 
 ![Jev RAG local web interface](docs/assets/demo-ui.png)
 
+## Try local search without an API key
+
+Start with the public documents included in this repository. This demo needs
+only Python 3.9+ with SQLite FTS5: no package install, API key, embeddings, or
+model request. It indexes only `./docs`, not your personal Documents folder.
+
+```bash
+git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db index
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db search 'retrieval' --no-jev
+```
+
+Expect ranked passages with source paths and retrieval timing. This is the
+**BM25-only baseline**, not Jev reranking or a generated answer. Keep the same
+`--documents` and `--db` on both commands; the index is isolated from your
+normal knowledge base. To try the full pipeline, continue below.
+
 ## Run it locally
 
 ```bash
