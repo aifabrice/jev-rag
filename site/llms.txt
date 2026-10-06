@@ -16,7 +16,7 @@ Source repository: https://github.com/aifabrice/jev-rag
 License: MIT
 Primary language: Python 3.9+
 Current status: Alpha
-Last updated: 2026-10-02
+Last updated: 2026-10-07
 
 ## Primary documentation
 
