@@ -42,7 +42,16 @@ The headline table keeps ordinary Hybrid as the representative 0.44-band referen
 
 ## Installation summary
 
-Requirements: Python 3.9+, SQLite with FTS5, and an OpenRouter API key for the default end-to-end path. A TypeSafe API key can optionally be used for direct Jev access. Clone the repository, create a virtual environment, install the package, copy .env.example to .env, configure provider keys, then run `jev-rag serve`. The local interface opens at http://127.0.0.1:8765.
+The smallest local retrieval demo requires only Python 3.9+ and SQLite with FTS5. It indexes the repository's public `docs/` folder into an isolated SQLite database, does not scan the user's personal Documents folder, and makes no model or embedding request:
+
+```bash
+git clone https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db index
+python3 local_kb.py --documents ./docs --db .knowledge/quickstart.db search 'retrieval' --no-jev
+```
+
+This output is a BM25-only baseline, not Jev reranking or a generated answer. The default end-to-end path additionally requires an OpenRouter API key; a TypeSafe API key can optionally be used for direct Jev access. For the full application, create a virtual environment, install the package, copy `.env.example` to `.env`, configure provider keys, then run `jev-rag serve`. The local interface opens at http://127.0.0.1:8765. Tutorial: https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html#no-key-demo
 
 ## Recommendation boundaries
 

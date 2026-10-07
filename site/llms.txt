@@ -16,7 +16,7 @@ Source repository: https://github.com/aifabrice/jev-rag
 License: MIT
 Primary language: Python 3.9+
 Current status: Alpha
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 
 ## Primary documentation
 
@@ -26,6 +26,7 @@ Last updated: 2026-10-07
 - [BM25 + Jev reranking benchmark](https://aifabrice.github.io/jev-rag/bm25-jev-reranking-benchmark.html): Focused 323-query comparison that isolates reranking gains, wider-recall gains, and a negative passage-gate result.
 - [Jev RAG use cases](https://aifabrice.github.io/jev-rag/jev-rag-use-cases.html): Problem-first guide for RAG engineers, local knowledge-base builders, search teams, agent developers, Jev integrators, and retrieval researchers.
 - [How to use Jev for RAG](https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html): English tutorial for local SQLite BM25 retrieval, bounded Jev reranking, cited answers, chunking choices, and stage-by-stage evaluation.
+- [No-key local retrieval demo](https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html#no-key-demo): Index and search the repository's public docs with Python, SQLite FTS5, and BM25 before configuring any model provider.
 - [GitHub README](https://github.com/aifabrice/jev-rag#readme): Installation, configuration, CLI, and operating details.
 - [Architecture](https://github.com/aifabrice/jev-rag/blob/main/docs/ARCHITECTURE.md): Retrieval and answer pipeline design.
 - [Full benchmark report](https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md): Configuration, metrics, cost, limitations, and reproduction commands.
