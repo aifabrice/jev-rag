@@ -460,6 +460,9 @@ format, limitations, and instructions for testing a private document collection.
 
 ## Community and roadmap
 
+- **Ecosystem listings:** [Awesome Jev](https://github.com/yibie/awesome-jev) and
+  [Awesome Jev TypeSafe](https://github.com/valentynkit/awesome-jev-typesafe) both
+  include Jev RAG. These are independent community directories, not endorsements.
 - Use [Discussions](https://github.com/aifabrice/jev-rag/discussions) for questions, use cases, and design ideas.
 - Use [Issues](https://github.com/aifabrice/jev-rag/issues) for reproducible bugs and scoped feature requests.
 - Good first contributions include OCR adapters, more document loaders, evaluation datasets, provider adapters, and packaging improvements.
