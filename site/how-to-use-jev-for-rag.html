@@ -29,7 +29,7 @@
             "description": "Index local documents with SQLite FTS5, retrieve candidates with BM25, rerank evidence with Jev, and stream a cited answer.",
             "url": "https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html",
             "datePublished": "2026-10-01",
-            "dateModified": "2026-10-02",
+            "dateModified": "2026-10-12",
             "author": {"@type": "Person", "name": "Fabrice", "url": "https://github.com/aifabrice"},
             "tool": ["Python 3.9+", "Jev API access", "OpenRouter API access"],
             "step": [
@@ -183,6 +183,13 @@ jev-rag --documents /absolute/path/to/documents --db .knowledge/documents.db sea
             <li>Keep failed queries; they tell you whether to improve chunking, retrieval recall, reranking policy, or generation.</li>
           </ol>
           <div class="hero-actions"><a class="button primary" href="https://github.com/aifabrice/jev-rag#quick-start">Run Jev RAG locally</a><a class="button secondary" href="seven-pipelines.html">Compare all pipelines</a></div>
+        </section>
+
+        <section>
+          <p class="kicker">Continue with evidence</p>
+          <h2>Choose the next Jev RAG reference.</h2>
+          <p>Use the benchmark explorer to compare retrieval paths, the use-case guide to choose a corpus shape, or the FAQ to verify privacy and vector-database boundaries before you connect a provider.</p>
+          <p><a class="text-link" href="bm25-jev-reranking-benchmark.html">Explore the BM25 + Jev benchmark →</a> · <a class="text-link" href="jev-rag-use-cases.html">Review local knowledge-search use cases →</a> · <a class="text-link" href="faq.html">Read the evidence-backed FAQ →</a></p>
         </section>
       </main>
 
