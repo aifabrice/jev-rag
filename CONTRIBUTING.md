@@ -20,6 +20,25 @@ cp .env.example .env
 
 Normal development and tests do not require credentials. Only add keys when explicitly performing a live smoke test.
 
+## Ten-minute first contribution
+
+You can verify the complete local indexing and retrieval path without an API
+key or paid provider call:
+
+```bash
+python3 local_kb.py --documents ./docs --db .knowledge/contributor.db index
+python3 local_kb.py --documents ./docs --db .knowledge/contributor.db search 'retrieval' --no-jev
+python -m unittest discover -s tests -v
+```
+
+Then pick one focused improvement from the issue tracker. Good starting areas
+are document loaders, offline regression tests, provider adapters, packaging,
+and clearer benchmark reproduction. For a larger design change, start a
+Discussion first so the scope and compatibility expectations are clear.
+
+When reporting a retrieval change, include a small before/after example or a
+repeatable benchmark result. Do not make a quality claim from a single query.
+
 ## Checks
 
 Run before submitting:

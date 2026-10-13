@@ -465,6 +465,7 @@ format, limitations, and instructions for testing a private document collection.
   include Jev RAG. These are independent community directories, not endorsements.
 - Use [Discussions](https://github.com/aifabrice/jev-rag/discussions) for questions, use cases, and design ideas.
 - Use [Issues](https://github.com/aifabrice/jev-rag/issues) for reproducible bugs and scoped feature requests.
+- Follow the [ten-minute first-contribution path](CONTRIBUTING.md#ten-minute-first-contribution) to verify indexing, retrieval, and tests without an API key.
 - Good first contributions include OCR adapters, more document loaders, evaluation datasets, provider adapters, and packaging improvements.
 - Planned work is tracked in the [issue tracker](https://github.com/aifabrice/jev-rag/issues).
 
