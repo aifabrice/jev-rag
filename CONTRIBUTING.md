@@ -39,6 +39,11 @@ Discussion first so the scope and compatibility expectations are clear.
 When reporting a retrieval change, include a small before/after example or a
 repeatable benchmark result. Do not make a quality claim from a single query.
 
+For document-processing additions, keep the existing extractor as the default,
+make new binaries or libraries optional, and keep document content local. A
+remote OCR or parsing service must be an explicit opt-in. Cover fallback and
+cleanup behavior with offline tests before proposing a provider-specific path.
+
 ## Checks
 
 Run before submitting:
