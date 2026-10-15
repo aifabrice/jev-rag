@@ -370,6 +370,7 @@ python scripts/benchmark.py --use-jev --provider openrouter
   [Awesome Jev TypeSafe](https://github.com/valentynkit/awesome-jev-typesafe) 已收录
   Jev RAG。它们是独立社区目录，不代表官方背书。
 - 在 [Discussions](https://github.com/aifabrice/jev-rag/discussions) 交流使用场景、问题和设计想法。
+- 当前设计讨论：[仅图像 PDF 的可选本地 OCR](https://github.com/aifabrice/jev-rag/discussions/14)。
 - 在 [Issues](https://github.com/aifabrice/jev-rag/issues) 提交可复现的缺陷和边界清晰的功能需求。
 - 适合首次贡献的方向包括 OCR 适配、更多文档加载器、评测数据集、模型服务商适配和打包改进。
 - 路线图在 [Issue 列表](https://github.com/aifabrice/jev-rag/issues) 中跟踪。
