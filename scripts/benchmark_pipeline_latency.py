@@ -95,6 +95,19 @@ PIPELINES: tuple[dict[str, Any], ...] = (
         "label": "Agentic Hybrid + Jev/retrieval fusion",
         "kwargs": {"retrieval_mode": "agentic-hybrid", "use_jev": True},
     },
+    {
+        "id": "agenticHybridTop200",
+        "label": "Agentic Hybrid high-recall top 200 + Jev",
+        "kwargs": {
+            "retrieval_mode": "agentic-hybrid",
+            "use_jev": True,
+            "top_k": 200,
+            "agentic_top_k": 200,
+            "hybrid_top_k": 200,
+            "vector_top_k": 200,
+            "jev_batch_size": 100,
+        },
+    },
 )
 
 
@@ -272,6 +285,14 @@ def main() -> int:
             print(f"Measuring {pipeline['label']}...", file=sys.stderr, flush=True)
             for index, query_id in enumerate(query_ids, start=1):
                 started = time.perf_counter()
+                search_kwargs = {
+                    "top_k": 50,
+                    "agentic_top_k": 50,
+                    "hybrid_top_k": 50,
+                    "vector_top_k": 50,
+                    "rrf_k": 60,
+                }
+                search_kwargs.update(pipeline["kwargs"])
                 result = run_search(
                     kb,
                     queries[query_id],
@@ -283,11 +304,7 @@ def main() -> int:
                     agentic_rounds=2,
                     agentic_queries=5,
                     agentic_per_query_k=100,
-                    agentic_top_k=50,
-                    hybrid_top_k=50,
-                    vector_top_k=50,
-                    rrf_k=60,
-                    **pipeline["kwargs"],
+                    **search_kwargs,
                 )
                 elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
                 rows.append(

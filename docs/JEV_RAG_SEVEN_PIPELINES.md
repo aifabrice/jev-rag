@@ -155,10 +155,11 @@ The result suggests that semantic judgment and retrieval priors contain compleme
 
 The high-recall benchmark variant expands both retrieval branches and the final
 pool to 200, then sends Jev two batches of 100. It reached `0.466171`
-nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The complete run
-measured a 3.05 s median and 4.24 s p95 latency at `$1.421625` provider cost.
-This is a benchmark-only operating point; the application UI and defaults still
-use the smaller pool. Because the previous best used Jev batches of 10, the
+nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The quality run recorded
+a 3.05 s median and 4.24 s p95 at `$1.421625`, but cache hits make that number
+unsuitable for cold comparison. The unified cold audit measured 6.52 s median and
+7.90 s p95 for the same configuration. This is a benchmark-only operating point;
+the application UI and defaults still use the smaller pool. Because the previous best used Jev batches of 10, the
 delta belongs to the complete high-recall configuration rather than candidate
 depth alone.
 

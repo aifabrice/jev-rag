@@ -430,21 +430,43 @@ python scripts/benchmark_beir.py \
 The compact disclosure is stored in
 [`nfcorpus-taxonomy-summary.json`](nfcorpus-taxonomy-summary.json).
 
-## Latency and provider usage
+## Latency normalization audit
 
-| Mode | Median query latency | p95 query latency |
-| --- | ---: | ---: |
-| BM25 top 30 | 1.92 ms | 6.60 ms |
-| BM25 top 30 + Jev | 1,075.16 ms | 16,952.82 ms |
-| Multi-round Agentic Hybrid retrieval (cold) | 6,990.67 ms | 24,391.42 ms |
+The earlier table mixed full runs, cold pilots, and stage-composed estimates, so its
+latency values were not directly comparable. We ran a separate unified audit on the
+same 10 NFCorpus test queries for every ordinary shortlist pipeline. The corpus
+index and corpus embeddings were preloaded before timing; result, Agentic planner,
+and query-embedding caches were disabled; final answer generation was excluded.
+The audit used the same process, provider, timeout, and query sample for every row.
 
-The Jev quality run reported 3,896,612 input tokens, 164,103 output tokens, and
-$0.163657704 total provider cost. Of the 323 queries, 25 produced no BM25
-candidate and therefore made no Jev request. Eight query-level Jev results were
-already cached by the pilot run; cold remote requests had a 1,141.83 ms median,
-17,060.52 ms p95, and 61,691.96 ms maximum latency. Provider latency and pricing
-can change, so these timing and cost numbers are observations from this run,
-not stable product guarantees.
+| Mode | Median query latency | p95 query latency | Dominant measured stage |
+| --- | ---: | ---: | --- |
+| BM25 top 30 | 1.27 ms | 6.08 ms | local FTS5/BM25 |
+| BM25 top 30 + Jev | 1.37 s | 4.34 s | remote Jev |
+| BM25 top 50 + Jev | 1.39 s | 2.35 s | remote Jev |
+| Agentic lexical top 50 | 3.85 s | 5.45 s | remote Agentic planning |
+| BM25 + embedding RRF | 2.33 s | 2.58 s | remote query embedding |
+| Agentic lexical top 50 + Jev | 6.01 s | 8.69 s | Agentic planning + Jev |
+| Hybrid top 50 + Jev | 3.89 s | 5.67 s | query embedding + Jev |
+| Agentic Hybrid top 50 + Jev | 6.14 s | 9.35 s | Agentic planning + embedding |
+| Agentic Hybrid top 200 + Jev (batch 100) | 6.52 s | 7.90 s | Agentic planning + embedding |
+
+The top-200 cold result is only about 0.38 seconds slower at the median than the
+top-50 result under the same protocol (6.52 s versus 6.14 s). This is why the
+previous 3.05 s top-200 number should not be compared with the historical 9.24 s
+top-50 estimate: the former was a cache-dominated full quality run, while the
+latter was a serial cold-stage estimate. Line Search and Passage Gate remain in
+the main table as historical specialized measurements and are not part of this
+shortlist audit.
+
+The machine-readable audit is [`nfcorpus-pipeline-latency-audit10-summary.json`](nfcorpus-pipeline-latency-audit10-summary.json), with provenance in
+[`nfcorpus-pipeline-latency.json`](nfcorpus-pipeline-latency.json). Provider latency
+and pricing can change, so these numbers are a reproducible snapshot rather than
+a service-level guarantee.
+
+The earlier Jev quality run reported 3,896,612 input tokens, 164,103 output tokens,
+and `$0.163657704` total provider cost. The high-recall quality run reported
+`$1.421625`; those cost figures are separate from this latency-only audit.
 
 ## Reproduce
 

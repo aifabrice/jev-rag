@@ -61,21 +61,21 @@
           <table>
             <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th><th>Median latency</th><th>p95 latency</th></tr></thead>
             <tbody>
-              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td><td>1.92 ms</td><td>6.60 ms</td></tr>
-              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td><td>1.08 s</td><td>16.95 s</td></tr>
-              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>0.593023</td><td>0.164474</td><td>1.92 s</td><td>17.84 s</td></tr>
+              <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td><td>1.27 ms</td><td>6.08 ms</td></tr>
+              <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td><td>1.37 s</td><td>4.34 s</td></tr>
+              <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>0.593023</td><td>0.164474</td><td>1.39 s</td><td>2.35 s</td></tr>
               <tr><td>Two-level Jev Line Search</td><td>0.366280</td><td><strong>0.657660</strong></td><td>0.169397</td><td>11.74 s</td><td>35.75 s</td></tr>
               <tr><td>Hybrid + Unified Passage Gate</td><td>0.376298</td><td>0.618043</td><td>0.166977</td><td>1.56 s</td><td>17.47 s</td></tr>
-              <tr><td>Agentic lexical top 50</td><td>0.380168</td><td>0.597940</td><td>0.185464</td><td>6.99 s</td><td>24.39 s</td></tr>
-              <tr><td>BM25 + embedding RRF top 50</td><td>0.396712</td><td>0.632089</td><td>0.193977</td><td>1.38 s</td><td>1.49 s</td></tr>
-              <tr><td>Multi-round Agentic Hybrid top 50</td><td>0.424145</td><td>0.637722</td><td>0.206303</td><td>6.99 s</td><td>24.39 s</td></tr>
-              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>7.52 s</td><td>26.35 s</td></tr>
-              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td><td>3.17 s</td><td>17.99 s</td></tr>
-              <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>9.24 s</td><td>38.72 s</td></tr>
-              <tr><td><strong>Agentic Hybrid high-recall top 200 + Jev</strong></td><td><strong>0.466171</strong></td><td><strong>0.669516</strong></td><td><strong>0.228912</strong></td><td>3.05 s</td><td>4.24 s</td></tr>
+              <tr><td>Agentic lexical top 50</td><td>0.380168</td><td>0.597940</td><td>0.185464</td><td>3.85 s</td><td>5.45 s</td></tr>
+              <tr><td>BM25 + embedding RRF top 50</td><td>0.396712</td><td>0.632089</td><td>0.193977</td><td>2.33 s</td><td>2.58 s</td></tr>
+              <tr><td>Multi-round Agentic Hybrid top 50</td><td>0.424145</td><td>0.637722</td><td>0.206303</td><td>6.99 s*</td><td>24.39 s*</td></tr>
+              <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>6.01 s</td><td>8.69 s</td></tr>
+              <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td><td>3.89 s</td><td>5.67 s</td></tr>
+              <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>6.14 s</td><td>9.35 s</td></tr>
+              <tr><td><strong>Agentic Hybrid high-recall top 200 + Jev</strong></td><td><strong>0.466171</strong></td><td><strong>0.669516</strong></td><td><strong>0.228912</strong></td><td>6.52 s</td><td>7.90 s</td></tr>
             </tbody>
           </table>
-          <p class="source-note">Latency covers retrieval and reranking only. One-time corpus indexing and final answer generation are excluded. Expensive remote pipelines use labeled cold pilots or per-query stage estimates, and provider latency can change.</p>
+          <p class="source-note">Latency covers retrieval and reranking only. The ordinary shortlist rows use the same 10-query cold audit with result, planner, and query-embedding caches disabled and corpus index/embeddings preloaded. One-time corpus indexing and final answer generation are excluded. The Line Search, Passage Gate, and multi-round Agentic Hybrid rows are historical measurements on different protocols; an asterisk marks a value that is not part of the unified audit. Provider latency can change.</p>
           <p><a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Inspect exact configuration, cost, caveats, and reproduction commands →</a> <a class="text-link" href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/nfcorpus-pipeline-latency.json">Inspect latency provenance →</a></p>
         </section>
 

@@ -259,9 +259,14 @@ python scripts/benchmark_beir.py \
   --output .knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-top200-test.json
 ```
 
-The complete test run reached `0.466171` nDCG@10, with 3.05 s median and
-4.24 s p95 latency, at `$1.421625` provider cost. The machine-readable
-disclosure is [`nfcorpus-agentic-hybrid-top200-summary.json`](../benchmarks/nfcorpus-agentic-hybrid-top200-summary.json).
+The complete quality run reached `0.466171` nDCG@10, with a recorded 3.05 s
+median and 4.24 s p95 at `$1.421625` provider cost. That run had cache hits and
+should not be used as a cold latency comparison. A unified 10-query cold audit of
+the same configuration measured 6.52 s median and 7.90 s p95 after disabling
+result, planner, and query-embedding caches while preloading the corpus index and
+embeddings. See [`nfcorpus-pipeline-latency-audit10-summary.json`](../benchmarks/nfcorpus-pipeline-latency-audit10-summary.json) and the full
+[`latency provenance`](../benchmarks/nfcorpus-pipeline-latency.json). The
+machine-readable quality disclosure is [`nfcorpus-agentic-hybrid-top200-summary.json`](../benchmarks/nfcorpus-agentic-hybrid-top200-summary.json).
 The previous best used 50 candidates and JEV batches of 10, so this delta
 belongs to the complete high-recall operating point and should not be
 attributed to candidate depth alone.

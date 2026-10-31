@@ -22,29 +22,32 @@
     {
       "id": "bm25",
       "label": "BM25 top 30",
-      "median_ms": 1.92,
-      "p95_ms": 6.6,
-      "basis": "measured",
-      "queries": 323,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-bm25-top30.json"
+      "median_ms": 1.27,
+      "p95_ms": 6.08,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "jev30",
       "label": "BM25 top 30 + Jev",
-      "median_ms": 1075.16,
-      "p95_ms": 16952.82,
-      "basis": "observed full run",
-      "queries": 323,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-jev-openrouter-top30.json"
+      "median_ms": 1366.74,
+      "p95_ms": 4344.85,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "jev50",
       "label": "BM25 top 50 + Jev",
-      "median_ms": 1921.29,
-      "p95_ms": 17839.73,
-      "basis": "observed full run",
-      "queries": 323,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-jev-openrouter-top50.json"
+      "median_ms": 1392.62,
+      "p95_ms": 2348.26,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "lineSearch",
@@ -67,61 +70,75 @@
     {
       "id": "agentic",
       "label": "Agentic lexical top 50",
-      "median_ms": 6990.67,
-      "p95_ms": 24391.42,
-      "basis": "cold two-round retrieval trace",
-      "queries": 323,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-test-retrieval.json",
-      "note": "Uses the same two-round Agentic lexical branch as the standalone Agentic pipeline; the parallel dense branch does not extend the recorded critical path."
+      "median_ms": 3848.86,
+      "p95_ms": 5452.6,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "note": "Uses the same two-round Agentic lexical branch as the standalone Agentic pipeline; the parallel dense branch does not extend the recorded critical path.",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "rrf",
       "label": "BM25 + embedding RRF",
-      "median_ms": 1375.83,
-      "p95_ms": 1487.06,
-      "basis": "cold pilot retrieval stage",
+      "median_ms": 2333.26,
+      "p95_ms": 2578.39,
+      "basis": "unified 10-query cold audit",
       "queries": 10,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-hybrid-text-embedding-3-large-jev-pilot10.json"
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "agenticJev",
       "label": "Agentic lexical top 50 + Jev",
-      "median_ms": 7516.1,
-      "p95_ms": 26347.26,
-      "basis": "serial estimate from recorded planner and reranker stages",
-      "queries": 323,
-      "source": "benchmarks/nfcorpus-agentic-summary.json"
+      "median_ms": 6009.4,
+      "p95_ms": 8687.05,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "hybrid",
       "label": "Hybrid top 50 + Jev",
-      "median_ms": 3167.72,
-      "p95_ms": 17991.92,
-      "basis": "per-query sum of cold retrieval and recorded Jev stages",
+      "median_ms": 3887.37,
+      "p95_ms": 5666.57,
+      "basis": "unified 10-query cold audit",
       "queries": 10,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-hybrid-text-embedding-3-large-jev-pilot10.json"
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "agenticHybrid",
       "label": "Agentic Hybrid + Jev/retrieval fusion",
-      "median_ms": 9241.41,
-      "p95_ms": 38719.01,
-      "basis": "per-query serial estimate from matched cold retrieval and recorded Jev stages",
-      "queries": 323,
+      "median_ms": 6140.84,
+      "p95_ms": 9351.55,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
       "sources": [
         ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-test-retrieval.json",
         ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-prior-test.json"
-      ]
+      ],
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     },
     {
       "id": "agenticHybridTop200",
       "label": "Agentic Hybrid high-recall top 200 + Jev",
-      "median_ms": 3050.22,
-      "p95_ms": 4239.17,
-      "basis": "observed full run; Jev batch size 100",
-      "queries": 323,
-      "source": ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-top200-test-batch100.json",
-      "note": "Benchmark-only operating point with Agentic and vector top 200; previous best used top 50 and Jev batches of 10."
+      "median_ms": 6521.02,
+      "p95_ms": 7897.3,
+      "basis": "unified 10-query cold audit",
+      "queries": 10,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-pipeline-latency-audit10.json",
+      "note": "Benchmark-only operating point with Agentic and vector top 200; previous best used top 50 and Jev batches of 10.",
+      "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded"
     }
-  ]
+  ],
+  "latency_audit": {
+    "source": "benchmarks/nfcorpus-pipeline-latency-audit10-summary.json",
+    "queries": 10,
+    "cache_state": "result, planner, and query-embedding caches disabled; corpus index/embedding preloaded",
+    "measured_at": "2026-10-31T10:55:45Z",
+    "note": "Line Search and Passage Gate remain historical cold-pilot rows and are not directly comparable to this unified shortlist audit."
+  }
 }

@@ -79,25 +79,28 @@ sizes and remote stages are shown explicitly.
 
 | Pipeline | nDCG@10 | MRR@10 | Recall@10 | Median latency | p95 latency |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| BM25 top 30 | 0.305654 | 0.512697 | 0.147309 | 1.92 ms | 6.60 ms |
-| BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667 | 1.08 s | 16.95 s |
-| BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474 | 1.92 s | 17.84 s |
-| Two-level Jev Line Search (60 finalists) | 0.366280 | **0.657660** | 0.169397 | 11.74 s | 35.75 s |
-| Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977 | 1.56 s | 17.47 s |
-| Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464 | 6.99 s | 24.39 s |
-| BM25 top 50 + Embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977 | 1.38 s | 1.49 s |
-| Multi-round Agentic Hybrid top 50 | 0.424145 | 0.637722 | 0.206303 | 6.99 s | 24.39 s |
-| **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** | 7.52 s | 26.35 s |
-| Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 | 3.17 s | 17.99 s |
-| **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.220885** | 9.24 s | 38.72 s |
-| **Agentic Hybrid high-recall top 200 + Jev (batch 100)** | **0.466171** | **0.669516** | **0.228912** | 3.05 s | 4.24 s |
+| BM25 top 30 | 0.305654 | 0.512697 | 0.147309 | 1.27 ms | 6.08 ms |
+| BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667 | 1.37 s | 4.34 s |
+| BM25 top 50 + Jev | 0.362468 | 0.593023 | 0.164474 | 1.39 s | 2.35 s |
+| Two-level Jev Line Search (60 finalists) | 0.366280 | **0.657660** | 0.169397 | 11.74 s* | 35.75 s* |
+| Hybrid top 50 + Unified Passage Gate | 0.376298 | 0.618043 | 0.166977 | 1.56 s* | 17.47 s* |
+| Agentic lexical top 50 | 0.380168 | 0.597940 | 0.185464 | 3.85 s | 5.45 s |
+| BM25 top 50 + Embedding top 50 + RRF | 0.396712 | 0.632089 | 0.193977 | 2.33 s | 2.58 s |
+| Multi-round Agentic Hybrid top 50 | 0.424145 | 0.637722 | 0.206303 | 6.99 s* | 24.39 s* |
+| **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** | 6.01 s | 8.69 s |
+| Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 | 3.89 s | 5.67 s |
+| **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.220885** | 6.14 s | 9.35 s |
+| **Agentic Hybrid high-recall top 200 + Jev (batch 100)** | **0.466171** | **0.669516** | **0.228912** | 6.52 s | 7.90 s |
 
 Latency covers retrieval and reranking, not one-time corpus indexing or final
-answer generation. Some rows are full-run observations while the expensive
-remote pipelines use cold pilots or serial estimates composed from recorded
-per-query stages; see
-[`nfcorpus-pipeline-latency.json`](benchmarks/nfcorpus-pipeline-latency.json)
-for the basis of every row. Provider latency can change substantially over time.
+answer generation. The ordinary shortlist rows now use one unified 10-query cold
+audit: result, planner, and query-embedding caches were disabled, while the corpus
+index and corpus embeddings were preloaded. The asterisked Line Search, Passage
+Gate, and multi-round Agentic Hybrid rows are historical measurements on a
+different protocol and are retained for context, not direct comparison. See
+[`nfcorpus-pipeline-latency.json`](benchmarks/nfcorpus-pipeline-latency.json) and the
+[`latency audit summary`](benchmarks/nfcorpus-pipeline-latency-audit10-summary.json)
+for provenance. Provider latency can change substantially over time.
 
 Line Search achieved the strongest first-hit behavior (`nDCG@1=0.554180`),
 but lower multi-document ranking quality and recall than Agentic or Hybrid.
@@ -120,8 +123,10 @@ The highest measured operating point is the high-recall Agentic Hybrid variant:
 BM25 and embedding retrieval both reach 200 candidates, then Jev reranks them
 in batches of 100 and applies the same dev-selected local RRF after Jev (Jev
 rank weight `1.0`, retrieval rank weight `0.25`). It reached `0.466171` test
-nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The full run measured a
-3.05 s median and 4.24 s p95 latency, with `$1.421625` provider cost.
+nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The earlier full run recorded 3.05 s median and 4.24 s p95, but that run
+was cache-dominated and is retained as a quality-run observation. Under the
+comparable cold audit, the same top-200 configuration measured 6.52 s median
+and 7.90 s p95, with `$1.421625` provider cost for the quality run.
 
 This is a benchmark operating point rather than a new UI pipeline. The former
 best run used 50 candidates and Jev batches of 10; the high-recall run uses

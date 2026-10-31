@@ -1,0 +1,291 @@
+{
+  "benchmark": "BEIR NFCorpus pipeline latency audit",
+  "split": "test",
+  "measured_at": "2026-10-31T10:55:45Z",
+  "provider": "openrouter",
+  "queries": 10,
+  "query_ids": [
+    "PLAIN-1018",
+    "PLAIN-102",
+    "PLAIN-1028",
+    "PLAIN-1039",
+    "PLAIN-1050",
+    "PLAIN-1066",
+    "PLAIN-1088",
+    "PLAIN-1109",
+    "PLAIN-1119",
+    "PLAIN-112"
+  ],
+  "cache_state": {
+    "result_cache": "disabled",
+    "planner_cache": "disabled through use_cache=False",
+    "query_embedding_cache": "disabled through use_cache=False",
+    "corpus_embedding": "prebuilt and memory-resident",
+    "corpus_index": "prebuilt before timers",
+    "answer_generation": "excluded"
+  },
+  "note": "Same ten non-empty test queries and same process. Remote provider latency is volatile; this is a cold comparison snapshot, not a service-level guarantee.",
+  "pipelines": [
+    {
+      "id": "bm25",
+      "label": "BM25 top 30",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 2,
+        "max": 30
+      },
+      "median_ms": 1.27,
+      "p95_ms": 6.08,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 1.25,
+          "p95": 6.0
+        },
+        "embedding_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "agentic_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "total_ms": {
+          "median": 1.25,
+          "p95": 6.1
+        }
+      }
+    },
+    {
+      "id": "jev30",
+      "label": "BM25 top 30 + Jev",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 2,
+        "max": 30
+      },
+      "median_ms": 1366.74,
+      "p95_ms": 4344.85,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 9.6,
+          "p95": 32.8
+        },
+        "embedding_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "agentic_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "total_ms": {
+          "median": 1366.65,
+          "p95": 4344.8
+        }
+      }
+    },
+    {
+      "id": "jev50",
+      "label": "BM25 top 50 + Jev",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 2,
+        "max": 50
+      },
+      "median_ms": 1392.62,
+      "p95_ms": 2348.26,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 9.05,
+          "p95": 48.6
+        },
+        "embedding_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "agentic_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "total_ms": {
+          "median": 1392.55,
+          "p95": 2348.2
+        }
+      }
+    },
+    {
+      "id": "agentic",
+      "label": "Agentic lexical top 50",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 50,
+        "max": 50
+      },
+      "median_ms": 3848.86,
+      "p95_ms": 5452.6,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 101.75,
+          "p95": 134.3
+        },
+        "embedding_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "agentic_ms": {
+          "median": 3848.6,
+          "p95": 5452.3
+        },
+        "total_ms": {
+          "median": 3848.8,
+          "p95": 5452.6
+        }
+      }
+    },
+    {
+      "id": "rrf",
+      "label": "BM25 + embedding RRF",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 50,
+        "max": 50
+      },
+      "median_ms": 2333.26,
+      "p95_ms": 2578.39,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 6.4,
+          "p95": 57.5
+        },
+        "embedding_ms": {
+          "median": 2304.2,
+          "p95": 2565.2
+        },
+        "agentic_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "total_ms": {
+          "median": 2333.2,
+          "p95": 2578.3
+        }
+      }
+    },
+    {
+      "id": "agenticJev",
+      "label": "Agentic lexical top 50 + Jev",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 50,
+        "max": 50
+      },
+      "median_ms": 6009.4,
+      "p95_ms": 8687.05,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 117.8,
+          "p95": 182.5
+        },
+        "embedding_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "agentic_ms": {
+          "median": 3971.85,
+          "p95": 4855.8
+        },
+        "total_ms": {
+          "median": 6009.3,
+          "p95": 8687.0
+        }
+      }
+    },
+    {
+      "id": "hybrid",
+      "label": "Hybrid top 50 + Jev",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 50,
+        "max": 50
+      },
+      "median_ms": 3887.37,
+      "p95_ms": 5666.57,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 9.45,
+          "p95": 60.4
+        },
+        "embedding_ms": {
+          "median": 2300.35,
+          "p95": 3315.4
+        },
+        "agentic_ms": {
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "total_ms": {
+          "median": 3887.2,
+          "p95": 5664.6
+        }
+      }
+    },
+    {
+      "id": "agenticHybrid",
+      "label": "Agentic Hybrid + Jev/retrieval fusion",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 50,
+        "max": 50
+      },
+      "median_ms": 6140.84,
+      "p95_ms": 9351.55,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 105.5,
+          "p95": 147.6
+        },
+        "embedding_ms": {
+          "median": 2255.7,
+          "p95": 2586.7
+        },
+        "agentic_ms": {
+          "median": 3910.65,
+          "p95": 6057.4
+        },
+        "total_ms": {
+          "median": 6140.7,
+          "p95": 9351.2
+        }
+      }
+    },
+    {
+      "id": "agenticHybridTop200",
+      "label": "Agentic Hybrid high-recall top 200 + Jev",
+      "queries": 10,
+      "candidate_counts": {
+        "min": 200,
+        "max": 200
+      },
+      "median_ms": 6521.02,
+      "p95_ms": 7897.3,
+      "stages_ms": {
+        "lexical_ms": {
+          "median": 97.5,
+          "p95": 157.2
+        },
+        "embedding_ms": {
+          "median": 2346.55,
+          "p95": 3795.0
+        },
+        "agentic_ms": {
+          "median": 4348.0,
+          "p95": 5669.3
+        },
+        "total_ms": {
+          "median": 6520.9,
+          "p95": 7896.9
+        }
+      }
+    }
+  ]
+}

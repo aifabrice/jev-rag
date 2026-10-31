@@ -39,9 +39,14 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 - The high-recall Agentic Hybrid benchmark variant (BM25 + embedding top 200,
   Jev batches of 100) reached `0.466171` nDCG@10 on the full 323-query
-  NFCorpus test split. It measured 3.05 s median, 4.24 s p95, and `$1.421625`
-  provider cost. This is documented as a benchmark operating point; the
-  default UI remains the smaller candidate pool.
+  NFCorpus test split. The quality run recorded 3.05 s median and 4.24 s p95
+  with `$1.421625` provider cost; a unified cold audit measured 6.52 s median
+  and 7.90 s p95 because the quality run had cache hits. This is documented as
+  a benchmark operating point; the default UI remains the smaller candidate
+  pool.
+- Added a unified 10-query cold latency audit with cache state, stage breakdown,
+  and comparable median/p95 values in
+  `benchmarks/nfcorpus-pipeline-latency-audit10-summary.json`.
 
 ## [0.7.0] - 2026-09-27
 

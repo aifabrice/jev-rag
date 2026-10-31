@@ -2533,6 +2533,7 @@ def run_search(
     line_search_top_k: int = DEFAULT_LINE_SEARCH_TOP_K,
     rrf_k: int = DEFAULT_RRF_K,
     jev_retrieval_prior_weight: float | None = None,
+    jev_batch_size: int = JEV_BATCH_SIZE,
 ) -> dict[str, Any]:
     if retrieval_mode in {"line-search", "hybrid-gate"} and not use_jev:
         raise ValueError(f"{retrieval_mode} 模式本身依赖 Jev，不能与 --no-jev 一起使用")
@@ -2594,6 +2595,7 @@ def run_search(
             provider,
             timeout,
             use_cache,
+            batch_size=jev_batch_size,
             retrieval_prior_weight=prior_weight,
             rank_fusion_k=rrf_k,
         )
