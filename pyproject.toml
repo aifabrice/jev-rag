@@ -51,7 +51,7 @@ jev-rag = "local_kb:main"
 jev-rag-smoke-test = "jev_test:main"
 
 [tool.setuptools]
-py-modules = ["local_kb", "jev_test", "taxonomy"]
+py-modules = ["local_kb", "jev_test", "taxonomy", "answer_taxonomy", "learning_to_rank", "pseudo_relevance"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

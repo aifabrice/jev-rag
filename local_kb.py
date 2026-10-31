@@ -1422,8 +1422,8 @@ def agentic_retrieve(
         raise ValueError("agentic_rounds 必须是正整数")
     if not 1 <= queries_per_round <= 10:
         raise ValueError("agentic_queries 必须在 1 到 10 之间")
-    if not 1 <= per_query_k <= 100 or not 1 <= top_k <= 100:
-        raise ValueError("Agentic 候选数必须在 1 到 100 之间")
+    if not 1 <= per_query_k <= 100 or not 1 <= top_k <= 500:
+        raise ValueError("Agentic 候选数必须在 1 到 500 之间")
 
     started = time.perf_counter()
     lexical_ms = 0.0

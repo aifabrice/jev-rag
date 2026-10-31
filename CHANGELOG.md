@@ -10,6 +10,9 @@ All notable changes are documented here. The project follows Semantic Versioning
   skip a redundant provider request without changing vectors or rankings.
 - Generalize Agentic retrieval from a fixed two/three-round implementation to
   any positive configured round count while keeping two as the default.
+- Allow the benchmark runner and Agentic retrieval branch to evaluate candidate
+  pools up to 500 items, enabling the published top-200 high-recall operating
+  point without changing the default UI limits.
 
 ### Security
 
@@ -31,6 +34,14 @@ All notable changes are documented here. The project follows Semantic Versioning
 - Install the embedding extra in CI so the taxonomy test suite has NumPy on
   every supported Python version.
 - Compile `taxonomy.py` explicitly during the CI bytecode validation step.
+
+### Benchmark
+
+- The high-recall Agentic Hybrid benchmark variant (BM25 + embedding top 200,
+  Jev batches of 100) reached `0.466171` nDCG@10 on the full 323-query
+  NFCorpus test split. It measured 3.05 s median, 4.24 s p95, and `$1.421625`
+  provider cost. This is documented as a benchmark operating point; the
+  default UI remains the smaller candidate pool.
 
 ## [0.7.0] - 2026-09-27
 

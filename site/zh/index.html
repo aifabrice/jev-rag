@@ -88,6 +88,7 @@
               <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>7.52 秒</td><td>26.35 秒</td></tr>
               <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td><strong>0.654583</strong></td><td>0.214907</td><td>3.17 秒</td><td>17.99 秒</td></tr>
               <tr><td><strong>Agentic Hybrid + Jev/原召回排名融合</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>9.24 秒</td><td>38.72 秒</td></tr>
+              <tr><td><strong>Agentic Hybrid 高召回 Top 200 + Jev</strong></td><td><strong>0.466171</strong></td><td><strong>0.669516</strong></td><td><strong>0.228912</strong></td><td>3.05 秒</td><td>4.24 秒</td></tr>
             </tbody>
           </table>
           <p class="source-note"><strong>不要过度解读：</strong>这些是项目自行运行、可以复现的结果，不是 MTEB 官方提交。延迟仅包含检索和重排，不包含一次性建库与最终回答生成；昂贵的远程方案使用冷启动小样本或逐 query 阶段估算，实际值会随供应商负载变化。</p>

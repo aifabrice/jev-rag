@@ -72,7 +72,7 @@
               <tr><td>BM25 top 50 + Jev</td><td>0.362468</td><td>+18.59%</td></tr>
               <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>+41.00%</td></tr>
               <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>+45.37%</td></tr>
-              <tr><td>Agentic Hybrid + rank fusion</td><td>0.450750</td><td>+47.47%</td></tr>
+              <tr><td>Agentic Hybrid high-recall top 200 + Jev</td><td>0.466171</td><td>+52.67%</td></tr>
             </tbody>
           </table>
           <p class="source-note">These are project-run results, not an official MTEB submission. Reproduce the comparison and evaluate it on your own corpus before choosing a pipeline.</p>
@@ -83,7 +83,7 @@
           <h2>Jev improved the order of the same BM25 candidate pool.</h2>
           <p>BM25 top 30 and BM25 top 30 + Jev use the same candidates. Jev raised nDCG@10 from 0.305654 to 0.353235, a 15.57% relative gain. That isolates the contribution of reranking from changes in first-stage recall.</p>
           <p>The larger gains came from widening the candidate pool before Jev. Agentic lexical search generates several bounded searches, executes them locally, fuses the results, and then sends the shortlist to Jev. It reached 0.430969 without maintaining a document embedding index.</p>
-          <p>The highest point estimate came from Agentic Hybrid with local rank fusion at 0.450750. That path adds online planning and embedding retrieval, so the highest score is not automatically the best operational choice.</p>
+          <p>The highest point estimate came from the high-recall Agentic Hybrid configuration at 0.466171. That path expands both retrieval branches to 200 and uses Jev batches of 100; it adds online planning and embedding retrieval, so the highest score is not automatically the best operational choice.</p>
         </section>
 
         <section>

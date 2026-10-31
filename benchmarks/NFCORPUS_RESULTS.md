@@ -256,6 +256,56 @@ the production default therefore remains ten candidates per Jev request.
 The compact disclosure is stored in
 [`nfcorpus-agentic-hybrid-summary.json`](nfcorpus-agentic-hybrid-summary.json).
 
+## High-recall Agentic Hybrid benchmark variant: top 200
+
+The high-recall variant keeps the same two-round Agentic planner and weighted
+RRF (`agentic=0.65`, `vector=1.0`, `k=60`), but takes 200 candidates from both
+the Agentic/BM25 and embedding branches before Jev. Jev processes those 200
+passages in two batches of 100. The post-rerank local prior remains
+`Jev=1.0` and original retrieval rank `0.25`; no additional provider call is
+introduced by this local fusion.
+
+| Metric | Retrieval before Jev | High-recall Agentic Hybrid + Jev |
+| --- | ---: | ---: |
+| nDCG@1 | 0.524252 | **0.575851** |
+| nDCG@10 | 0.428482 | **0.466171** |
+| MRR@10 | 0.632520 | **0.669516** |
+| MAP@10 | 0.322796 | **0.360677** |
+| Recall@10 | 0.213323 | **0.228912** |
+| Recall@50 | 0.339014 | **0.355804** |
+| Recall@100 | 0.406070 | **0.424825** |
+| Recall@200 | 0.484060 | 0.484060 |
+
+Compared with the previous best 50-candidate run (`0.450750` nDCG@10 and
+`0.333047` Recall@50), this operating point gains `+0.015421` nDCG@10 and
+`+0.022757` Recall@50. The complete 323-query run measured 3,050.22 ms median
+and 4,239.17 ms p95 latency. It reported 33,848,212 input tokens, 1,399,236
+output tokens, and `$1.421624904` provider cost.
+
+This is a project-run result, not an official MTEB submission. The previous
+best used JEV batches of 10; this run uses batches of 100 to keep a 200-item
+candidate pool practical. The measured improvement therefore belongs to the
+complete high-recall configuration and should not be attributed to candidate
+depth alone.
+
+Reproduce it with:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 200 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 200 --rrf-k 60 \
+  --agentic-hybrid --agentic-rounds 2 --agentic-queries 5 \
+  --agentic-per-query-k 100 --agentic-domain-hint medical \
+  --agentic-weight 0.65 --vector-weight 1.0 \
+  --use-jev --jev-batch-size 100 \
+  --jev-retrieval-prior-weight 0.25 --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-top200-test.json
+```
+
+The compact machine-readable disclosure is stored in
+[`nfcorpus-agentic-hybrid-top200-summary.json`](nfcorpus-agentic-hybrid-top200-summary.json).
+
 ## Two-level Jev Line Search experiment
 
 On 2026-09-27, version 0.4.0 evaluated the TypeSafe Semantic Find pattern as a

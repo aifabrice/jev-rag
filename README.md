@@ -88,6 +88,7 @@ sizes and remote stages are shown explicitly.
 | **Agentic lexical top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** | 7.52 s | 26.35 s |
 | Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 | 3.17 s | 17.99 s |
 | **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | **0.652606** | **0.220885** | 9.24 s | 38.72 s |
+| **Agentic Hybrid high-recall top 200 + Jev (batch 100)** | **0.466171** | **0.669516** | **0.228912** | 3.05 s | 4.24 s |
 
 Latency covers retrieval and reranking, not one-time corpus indexing or final
 answer generation. Some rows are full-run observations while the expensive
@@ -113,17 +114,25 @@ report, but are omitted from this headline table because they sit in the same
 `0.44-0.45` band without a useful new operating point. The table keeps ordinary
 Hybrid as the representative reference and the best measured pipeline.
 
-The best pipeline uses a dev-selected local RRF after Jev (Jev rank weight
-`1.0`, retrieval rank weight `0.25`). It adds no provider call and reached
-`0.450750` test nDCG@10. Its cold retrieval-only median was `6.99 s` and p95
-was `24.39 s` because two planning rounds run per query.
+The highest measured operating point is the high-recall Agentic Hybrid variant:
+BM25 and embedding retrieval both reach 200 candidates, then Jev reranks them
+in batches of 100 and applies the same dev-selected local RRF after Jev (Jev
+rank weight `1.0`, retrieval rank weight `0.25`). It reached `0.466171` test
+nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The full run measured a
+3.05 s median and 4.24 s p95 latency, with `$1.421625` provider cost.
+
+This is a benchmark operating point rather than a new UI pipeline. The former
+best run used 50 candidates and Jev batches of 10; the high-recall run uses
+200 candidates and batches of 100 to keep the full test practical. The complete
+quality delta should therefore be attributed to this configuration, not to
+candidate depth alone.
 
 On the [MTEB NFCorpus page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
-observed on 2026-09-26, inserting `0.450750`
-numerically would place this run at approximately **#4 of 251 results (top
-1.6%)**. This is an **unofficial comparison**, not an MTEB leaderboard rank:
-the multi-stage pipeline has not been submitted to MTEB, and its top-50
-configuration was evaluated on the same test set.
+observed on 2026-09-26, inserting `0.466171` numerically would move this run
+above the previous `0.450750` project result in that snapshot. This is an
+**unofficial comparison**, not an MTEB leaderboard rank: the multi-stage
+pipeline has not been submitted to MTEB, and the result is a project-run
+evaluation on the same test set.
 
 [Full results, exact configuration, cost, caveats, and reproduction commands](benchmarks/NFCORPUS_RESULTS.md)
 · [Machine-readable Agentic summary](benchmarks/nfcorpus-agentic-summary.json)
@@ -131,12 +140,31 @@ configuration was evaluated on the same test set.
 · [Machine-readable Passage Gate summary](benchmarks/nfcorpus-passage-gate-summary.json)
 · [Machine-readable Taxonomy summary](benchmarks/nfcorpus-taxonomy-summary.json)
 · [Machine-readable Agentic Hybrid summary](benchmarks/nfcorpus-agentic-hybrid-summary.json)
+· [Machine-readable high-recall Agentic Hybrid summary](benchmarks/nfcorpus-agentic-hybrid-top200-summary.json)
+
+The repository also includes a reproducible, cached **development-set
+learning-to-rank experiment**. It learns a transparent pairwise linear
+combination of existing BM25, embedding, Agentic, and Jev rank signals without
+new provider calls. On NFCorpus it reached `0.449055` nDCG@10 versus the
+current `0.450750` baseline, so it is documented as an experimental negative
+result rather than advertised as a quality improvement. See
+[`docs/LEARNING_TO_RANK.md`](docs/LEARNING_TO_RANK.md) and
+[`scripts/benchmark_ltr.py`](scripts/benchmark_ltr.py).
+
+A second no-cost experiment tests pseudo-relevance feedback: extract terms
+from the first-pass candidates, run a focused BM25 query, and fuse the result.
+It improved retrieval-only nDCG@10 by `+0.004816`, but a 10-query Jev pilot
+fell from `0.476183` to `0.463357`; it is therefore not enabled by default.
+See [`docs/PSEUDO_RELEVANCE.md`](docs/PSEUDO_RELEVANCE.md),
+[`scripts/benchmark_prf.py`](scripts/benchmark_prf.py), and
+[`scripts/pilot_prf_jev.py`](scripts/pilot_prf_jev.py).
 
 ```text
 default: local files -> SQLite BM25 ----------------------> Jev -> MiniMax
 agentic: local files -> MiniMax plans -> multi-BM25/RRF --> Jev -> MiniMax
 hybrid:  local files -> BM25 + OpenRouter embeddings/RRF -> Jev -> MiniMax
 agentic-hybrid: multi-round plans -> multi-BM25 + embedding/RRF -> Jev + retrieval prior -> MiniMax
+high-recall benchmark: same Agentic Hybrid path -> top 200 -> Jev batches of 100
 taxonomy: local files -> corpus taxonomy -> Hybrid top 50 + routed extras -> Jev -> MiniMax
 gate:    local files -> BM25 + embeddings/RRF -> unified Jev Gate -> MiniMax
 line:    local files -> parallel Jev Choice windows -> global Choice -> MiniMax

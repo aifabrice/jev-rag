@@ -239,6 +239,33 @@ For robustness experiments, ordinary Jev reranking also accepts
 that one compact batch of 50 was promising, but it is not a full benchmark and
 the default remains batches of ten.
 
+### High-recall Agentic Hybrid benchmark variant
+
+The high-recall variant keeps the same two-round planner, weighted RRF, and
+post-rerank prior, but expands both retrieval branches and the final candidate
+pool to 200. It uses JEV batches of 100 so the complete test run remains
+practical. This is a benchmark operating point, not a new UI pipeline:
+
+```bash
+python scripts/benchmark_beir.py \
+  --dataset nfcorpus --split test --top-k 200 \
+  --embedding-model openai/text-embedding-3-large \
+  --vector-top-k 200 --rrf-k 60 \
+  --agentic-hybrid --agentic-rounds 2 --agentic-queries 5 \
+  --agentic-per-query-k 100 --agentic-domain-hint medical \
+  --agentic-weight 0.65 --vector-weight 1.0 \
+  --use-jev --jev-batch-size 100 \
+  --jev-retrieval-prior-weight 0.25 --provider openrouter \
+  --output .knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-top200-test.json
+```
+
+The complete test run reached `0.466171` nDCG@10, with 3.05 s median and
+4.24 s p95 latency, at `$1.421625` provider cost. The machine-readable
+disclosure is [`nfcorpus-agentic-hybrid-top200-summary.json`](../benchmarks/nfcorpus-agentic-hybrid-top200-summary.json).
+The previous best used 50 candidates and JEV batches of 10, so this delta
+belongs to the complete high-recall operating point and should not be
+attributed to candidate depth alone.
+
 ## Evaluate two-level Line Search
 
 Line Search evaluates the complete corpus with Jev rather than retrieving a

@@ -72,6 +72,7 @@
               <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td><td>7.52 s</td><td>26.35 s</td></tr>
               <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td><td>3.17 s</td><td>17.99 s</td></tr>
               <tr><td><strong>Agentic Hybrid + Jev/retrieval fusion</strong></td><td><strong>0.450750</strong></td><td>0.652606</td><td><strong>0.220885</strong></td><td>9.24 s</td><td>38.72 s</td></tr>
+              <tr><td><strong>Agentic Hybrid high-recall top 200 + Jev</strong></td><td><strong>0.466171</strong></td><td><strong>0.669516</strong></td><td><strong>0.228912</strong></td><td>3.05 s</td><td>4.24 s</td></tr>
             </tbody>
           </table>
           <p class="source-note">Latency covers retrieval and reranking only. One-time corpus indexing and final answer generation are excluded. Expensive remote pipelines use labeled cold pilots or per-query stage estimates, and provider latency can change.</p>
@@ -93,7 +94,7 @@
           </article>
           <article class="question-card">
             <h2>4. Agentic Hybrid + rank fusion</h2>
-            <p>Multi-round lexical planning runs beside the original-query embedding lookup. Jev alone reached 0.445761 nDCG@10; a zero-call local blend of Jev rank and retrieval rank reached 0.450750. The gain suggests that semantic judgment and retrieval priors contain complementary information.</p>
+            <p>Multi-round lexical planning runs beside the original-query embedding lookup. The previous top-50 operating point reached 0.450750 nDCG@10; expanding both retrieval branches to 200 and scoring Jev in batches of 100 reached 0.466171. The gain comes from this high-recall benchmark configuration and its larger Jev batches, so it is reported separately from the default UI settings.</p>
           </article>
           <article class="question-card">
             <h2>5. Taxonomy routing</h2>

@@ -97,7 +97,7 @@
           <article><strong>0</strong><span>vector databases required</span></article>
           <article><strong>3,633</strong><span>NFCorpus documents evaluated</span></article>
           <article><strong>323</strong><span>test queries, not a hand-picked sample</span></article>
-          <article><strong>0.451</strong><span>highest recorded nDCG@10 point estimate</span></article>
+          <article><strong>0.466</strong><span>highest recorded nDCG@10 point estimate</span></article>
         </section>
 
         <section id="benchmark" class="benchmark section">
@@ -117,22 +117,23 @@
               <button class="pipeline-option" data-pipeline="rrf" role="option"><span>07</span><div><strong>BM25 + embedding RRF</strong><small>Hybrid, before Jev</small></div></button>
               <button class="pipeline-option" data-pipeline="agenticJev" role="option"><span>08</span><div><strong>Agentic lexical + Jev</strong><small>Vector-free expansion</small></div></button>
               <button class="pipeline-option" data-pipeline="hybrid" role="option"><span>09</span><div><strong>Hybrid top 50 + Jev</strong><small>Representative 0.44 reference</small></div></button>
-              <button class="pipeline-option active" data-pipeline="agenticHybrid" role="option" aria-selected="true"><span>10</span><div><strong>Agentic Hybrid + Jev/retrieval fusion</strong><small>Highest measured score</small></div></button>
+              <button class="pipeline-option" data-pipeline="agenticHybrid" role="option"><span>10</span><div><strong>Agentic Hybrid + Jev/retrieval fusion</strong><small>Previous best top 50</small></div></button>
+              <button class="pipeline-option active" data-pipeline="agenticHybridTop200" role="option" aria-selected="true"><span>11</span><div><strong>Agentic Hybrid high-recall top 200</strong><small>Highest measured score</small></div></button>
             </div>
 
             <div class="metric-stage" aria-live="polite">
-              <div class="metric-lead"><span id="selected-label">Agentic Hybrid + Jev/retrieval fusion</span><strong id="selected-score">0.450750</strong><small>nDCG@10</small></div>
+              <div class="metric-lead"><span id="selected-label">Agentic Hybrid high-recall top 200 + Jev</span><strong id="selected-score">0.466171</strong><small>nDCG@10</small></div>
               <div class="metric-bars">
-                <div class="metric-row"><div><span>nDCG@10</span><output id="ndcg-value">0.450750</output></div><div class="bar"><i id="ndcg-bar"></i></div></div>
-                <div class="metric-row"><div><span>MRR@10</span><output id="mrr-value">0.652606</output></div><div class="bar"><i id="mrr-bar"></i></div></div>
-                <div class="metric-row"><div><span>Recall@10</span><output id="recall-value">0.220885</output></div><div class="bar"><i id="recall-bar"></i></div></div>
+                <div class="metric-row"><div><span>nDCG@10</span><output id="ndcg-value">0.466171</output></div><div class="bar"><i id="ndcg-bar"></i></div></div>
+                <div class="metric-row"><div><span>MRR@10</span><output id="mrr-value">0.669516</output></div><div class="bar"><i id="mrr-bar"></i></div></div>
+                <div class="metric-row"><div><span>Recall@10</span><output id="recall-value">0.228912</output></div><div class="bar"><i id="recall-bar"></i></div></div>
               </div>
               <div class="latency-stats" aria-label="Recorded query latency">
-                <div><span>Median latency</span><output id="latency-median">9.24 s</output></div>
-                <div><span>p95 latency</span><output id="latency-p95">38.72 s</output></div>
-                <small id="latency-basis">323-query serial estimate from matched cold stages</small>
+                <div><span>Median latency</span><output id="latency-median">3.05 s</output></div>
+                <div><span>p95 latency</span><output id="latency-p95">4.24 s</output></div>
+                <small id="latency-basis">323-query observed full run; Jev batch size 100</small>
               </div>
-              <p id="pipeline-note" class="pipeline-note">A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning remains the dominant latency stage.</p>
+              <p id="pipeline-note" class="pipeline-note">Benchmark-only high-recall operating point: 200 candidates from both retrieval branches, then Jev batches of 100.</p>
             </div>
           </div>
 

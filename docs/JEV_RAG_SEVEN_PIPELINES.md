@@ -59,6 +59,7 @@ These modes vary three independent decisions:
 | Agentic lexical top 50 + Jev | 0.430969 | 0.644041 | 0.204138 |
 | Hybrid top 50 + Jev | 0.444327 | **0.654583** | 0.214907 |
 | **Agentic Hybrid + Jev/retrieval rank fusion** | **0.450750** | 0.652606 | **0.220885** |
+| **Agentic Hybrid high-recall top 200 + Jev** | **0.466171** | **0.669516** | **0.228912** |
 
 The ranking table is useful, but the transitions between rows explain more than the final winner.
 
@@ -123,7 +124,7 @@ For this 3,633-document corpus, the one-time embedding build took about 285 seco
 
 For most deployments that can accept an embedding boundary, this is the safest high-quality choice in the current implementation.
 
-## 4. Agentic Hybrid: the best measured score came from rank fusion
+## 4. Agentic Hybrid: the best measured score came from high-recall fusion
 
 Agentic Hybrid runs multi-round lexical planning alongside the original-query embedding lookup, then uses weighted RRF:
 
@@ -152,7 +153,14 @@ That reached `0.450750` nDCG@10. The `0.004989` improvement over Jev-only orderi
 
 The result suggests that semantic judgment and retrieval priors contain complementary information. Replacing one completely with the other throws some of that information away.
 
-This was the highest measured quality point, but it was not cheap or fast. Cold retrieval had a median of about `6.99 s` and p95 of `24.39 s`; planning and Jev together cost about `$0.537`, excluding the cached corpus-embedding build.
+The high-recall benchmark variant expands both retrieval branches and the final
+pool to 200, then sends Jev two batches of 100. It reached `0.466171`
+nDCG@10, `0.669516` MRR@10, and `0.228912` Recall@10. The complete run
+measured a 3.05 s median and 4.24 s p95 latency at `$1.421625` provider cost.
+This is a benchmark-only operating point; the application UI and defaults still
+use the smaller pool. Because the previous best used Jev batches of 10, the
+delta belongs to the complete high-recall configuration rather than candidate
+depth alone.
 
 ## 5. Taxonomy: higher candidate recall did not improve final ranking
 

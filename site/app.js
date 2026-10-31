@@ -9,6 +9,7 @@ const pipelines = {
   agenticJev: { label: "Agentic lexical top 50 + Jev", ndcg: 0.430969, mrr: 0.644041, recall: 0.204138, medianMs: 7516.10, p95Ms: 26347.26, latencyBasis: "323-query serial estimate from recorded stages", note: "Agent-generated search terms widen local recall, then Jev reranks the top 50 passages." },
   hybrid: { label: "Hybrid top 50 + Jev", ndcg: 0.444327, mrr: 0.654583, recall: 0.214907, medianMs: 3167.72, p95Ms: 17991.92, latencyBasis: "10-query cold component sum", note: "BM25 and embedding rankings are fused with RRF before Jev reranks the evidence." },
   agenticHybrid: { label: "Agentic Hybrid + Jev/retrieval fusion", ndcg: 0.450750, mrr: 0.652606, recall: 0.220885, medianMs: 9241.41, p95Ms: 38719.01, latencyBasis: "323-query serial estimate from matched cold stages", note: "A dev-selected zero-call rank fusion improved the Jev-only order; two-round planning remains the dominant latency stage." },
+  agenticHybridTop200: { label: "Agentic Hybrid high-recall top 200 + Jev", ndcg: 0.466171, mrr: 0.669516, recall: 0.228912, medianMs: 3050.22, p95Ms: 4239.17, latencyBasis: "323-query observed full run; Jev batch size 100", note: "Benchmark-only high-recall operating point: Agentic and vector branches retrieve 200 candidates, then Jev scores batches of 100." },
 };
 const fields = {
   label: document.querySelector("#selected-label"), score: document.querySelector("#selected-score"),

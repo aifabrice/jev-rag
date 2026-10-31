@@ -127,6 +127,11 @@ the Jev rank and original retrieval rank (`1.0:0.25`, `k=60`). This prior-aware
 ordering makes no additional provider call and can be disabled with
 `--jev-retrieval-prior-weight 0`.
 
+The public high-recall benchmark variant keeps the same path but requests 200
+items from both retrieval branches and sends them to Jev in batches of 100.
+This is a benchmark-only operating point; the application defaults and normal
+UI candidate limits remain unchanged.
+
 Generated lexical searches are not embedded. This prevents ten additional
 remote embedding calls from multiplying cost and avoids counting the original
 BM25 ranking twice. Round two remains sequential because it uses first-round

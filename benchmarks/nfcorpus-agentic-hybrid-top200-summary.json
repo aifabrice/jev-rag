@@ -1,0 +1,69 @@
+{
+  "benchmark": "BEIR NFCorpus",
+  "split": "test",
+  "date": "2026-10-31",
+  "version": "0.7.0",
+  "queries": 323,
+  "documents": 3633,
+  "dataset_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",
+  "configuration": {
+    "planner_model": "minimax/minimax-m3",
+    "planner_domain_hint": "medical",
+    "planner_rounds": 2,
+    "queries_per_round": 5,
+    "bm25_per_query_k": 100,
+    "embedding_model": "openai/text-embedding-3-large",
+    "vector_top_k": 200,
+    "agentic_weight": 0.65,
+    "vector_weight": 1.0,
+    "rrf_k": 60,
+    "candidate_top_k": 200,
+    "reranker": "typesafe/jev-1.13-20260917",
+    "jev_batch_size": 100,
+    "jev_candidate_max_chars": 1800,
+    "jev_retrieval_prior_weight": 0.25,
+    "post_rerank_jev_rank_weight": 1.0,
+    "post_rerank_retrieval_rank_weight": 0.25,
+    "weight_selection_split": "dev",
+    "test_weight_tuning": false,
+    "benchmark_variant": "high-recall Agentic Hybrid; batch size 100 is benchmark-only"
+  },
+  "retrieval": {
+    "ndcg_at_10": 0.428482,
+    "mrr_at_10": 0.63252,
+    "map_at_10": 0.322796,
+    "recall_at_10": 0.213323,
+    "recall_at_50": 0.339014,
+    "recall_at_100": 0.40607,
+    "recall_at_200": 0.48406
+  },
+  "agentic_hybrid_plus_jev": {
+    "ndcg_at_1": 0.575851,
+    "ndcg_at_10": 0.466171,
+    "mrr_at_10": 0.669516,
+    "map_at_10": 0.360677,
+    "recall_at_10": 0.228912,
+    "recall_at_50": 0.355804,
+    "recall_at_100": 0.424825,
+    "recall_at_200": 0.48406,
+    "precision_at_10": 0.336842,
+    "latency_ms": {
+      "median": 3050.22,
+      "p95": 4239.17
+    }
+  },
+  "comparison_to_previous_best": {
+    "previous_ndcg_at_10": 0.45075,
+    "absolute_delta": 0.015421,
+    "relative_delta_percent": 3.421187,
+    "previous_recall_at_50": 0.333047,
+    "recall_at_50_delta": 0.022757,
+    "previous_configuration": "Agentic Hybrid top 50 + Jev batch 10"
+  },
+  "usage": {
+    "input_tokens": 33848212,
+    "output_tokens": 1399236,
+    "cost_usd": 1.421624904
+  },
+  "caveat": "This is a project-run multi-stage retrieval result, not an official MTEB submission. The candidate pool and vector retrieval depth are 200; JEV batch size 100 was used to keep the full test run practical. The previous best used batch size 10, so the improvement should be attributed to this complete operating point rather than candidate depth alone."
+}

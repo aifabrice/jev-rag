@@ -112,6 +112,16 @@
         ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-test-retrieval.json",
         ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-prior-test.json"
       ]
+    },
+    {
+      "id": "agenticHybridTop200",
+      "label": "Agentic Hybrid high-recall top 200 + Jev",
+      "median_ms": 3050.22,
+      "p95_ms": 4239.17,
+      "basis": "observed full run; Jev batch size 100",
+      "queries": 323,
+      "source": ".knowledge/public-benchmarks/results/nfcorpus-agentic-hybrid-jev-top200-test-batch100.json",
+      "note": "Benchmark-only operating point with Agentic and vector top 200; previous best used top 50 and Jev batches of 10."
     }
   ]
 }

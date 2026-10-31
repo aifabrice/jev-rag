@@ -35,6 +35,7 @@ BEIR NFCorpus 完整测试集：3,633 个文档、323 个查询。所有结果�
 | **Agentic 词法检索 Top 50 + Jev** | **0.430969** | **0.644041** | **0.204138** | 7.52 秒 | 26.35 秒 |
 | 混合召回 Top 50 + Jev | 0.444327 | **0.654583** | 0.214907 | 3.17 秒 | 17.99 秒 |
 | **Agentic Hybrid + Jev/原召回排名融合** | **0.450750** | **0.652606** | **0.220885** | 9.24 秒 | 38.72 秒 |
+| **Agentic Hybrid 高召回 Top 200 + Jev（每批 100）** | **0.466171** | **0.669516** | **0.228912** | 3.05 秒 | 4.24 秒 |
 
 延迟只统计单次 query 的检索和重排，不包含一次性全库建索引与最终回答生成。
 不同方案分别采用完整运行、冷启动小样本或逐 query 阶段合成估算；每行的口径见
@@ -54,13 +55,19 @@ Hybrid（0.396712）和 Hybrid + Jev（0.444327）。它仍作为提示注入筛
 `0.44-0.45` 的相近区间，不再放入首页主表。主表只保留代表性的普通
 Hybrid 和当前最高分方案。
 
-最高分方案在 Jev 之后使用开发集选定的本地 RRF（Jev 排名权重 `1.0`，
-原召回排名权重 `0.25`），不增加模型调用，测试集 nDCG@10 为 `0.450750`。
-它的冷跑检索中位延迟为 `6.99 秒`，P95 为 `24.39 秒`。
+当前最高测评分数来自高召回 Agentic Hybrid：BM25 和 Embedding 各取 200 个
+候选，Jev 每批判断 100 个候选，再使用开发集选定的本地 RRF（Jev 排名权重
+`1.0`、原召回排名权重 `0.25`）。测试集 nDCG@10 为 `0.466171`，MRR@10
+为 `0.669516`，Recall@10 为 `0.228912`；完整运行的中位延迟为 `3.05 秒`，
+P95 为 `4.24 秒`，供应商费用为 `$1.421625`。
+
+这是 Agentic Hybrid 的高召回 Benchmark 配置，不是新增的网页模式。之前的
+最佳结果使用 Top 50 和每批 10 个候选；这次使用 Top 200 和每批 100 个候选，
+因此提升应归因于完整配置，不能只归因于候选数量。
 
 以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
-`0.450750` 约为 **251 个结果中第 4（Top 1.6%）**。这是一个**非官方的数值比较**，
-不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且 Top 50 参数是在同一测试集上观察的。
+`0.466171` 在该快照中会高于之前项目的 `0.450750`。这是一个**非官方的数值比较**，
+不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且结果是项目在同一测试集上的运行。
 
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
 · [Agentic 机器可读结果](benchmarks/nfcorpus-agentic-summary.json)
@@ -68,6 +75,7 @@ Hybrid 和当前最高分方案。
 · [Passage Gate 机器可读结果](benchmarks/nfcorpus-passage-gate-summary.json)
 · [知识分类树机器可读结果](benchmarks/nfcorpus-taxonomy-summary.json)
 · [Agentic Hybrid 机器可读结果](benchmarks/nfcorpus-agentic-hybrid-summary.json)
+· [高召回 Agentic Hybrid 机器可读结果](benchmarks/nfcorpus-agentic-hybrid-top200-summary.json)
 
 ![Jev RAG 本地网页界面](docs/assets/demo-ui.png)
 
@@ -76,6 +84,7 @@ Hybrid 和当前最高分方案。
 Agentic：本地文件 → MiniMax 规划 → 多路 BM25/RRF → Jev → MiniMax
 混合：本地文件 → BM25 + OpenRouter Embedding/RRF → Jev → MiniMax
 Agentic Hybrid：两轮规划 → 多路 BM25 + Embedding/RRF → Jev + 原召回先验 → MiniMax
+高召回 Benchmark：同一 Agentic Hybrid → Top 200 → Jev 每批 100 个候选
 分类树：本地文件 → 语料分类树 → Hybrid Top 50 + 路由补充 → Jev → MiniMax
 Gate：本地文件 → BM25 + Embedding/RRF → 统一 Jev Gate → MiniMax
 Line：本地文件 → 并行 Jev Choice 窗口 → 全局 Choice → MiniMax

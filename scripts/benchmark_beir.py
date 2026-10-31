@@ -55,6 +55,19 @@ from taxonomy import (  # noqa: E402
     save_taxonomy,
     taxonomy_candidate_expansion,
 )
+from answer_taxonomy import (  # noqa: E402
+    DEFAULT_ANSWER_LEAF_SIZE,
+    DEFAULT_ANSWER_MIN_ITEMS,
+    DEFAULT_ANSWER_ROUTE_LEAVES,
+    DEFAULT_ANSWER_ROUTE_WEIGHT,
+    DEFAULT_ANSWER_TOP_BRANCHES,
+    answer_taxonomy_candidate_expansion,
+    answer_taxonomy_rank_fusion,
+    build_answer_supervised_taxonomy,
+    load_answer_taxonomy,
+    route_answer_taxonomy,
+    save_answer_taxonomy,
+)
 
 
 DATASETS = {
@@ -481,6 +494,93 @@ def load_or_create_benchmark_taxonomy(
     }
 
 
+def load_or_create_answer_supervised_taxonomy(
+    runtime_root: Path,
+    model: str,
+    corpus_vectors: Any,
+    doc_ids: list[str],
+    dev_query_vectors: dict[str, list[float]],
+    dev_query_ids: list[str],
+    dev_qrels: dict[str, dict[str, int]],
+    *,
+    top_branches: int,
+    leaf_size: int,
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+    supervision_fingerprint = hashlib.sha256(
+        json.dumps(
+            [
+                sorted(dev_query_ids),
+                sorted(
+                    (query_id, sorted((str(doc_id), int(score)) for doc_id, score in rel.items()))
+                    for query_id, rel in dev_qrels.items()
+                ),
+            ],
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            [
+                "answer-taxonomy-v1",
+                model,
+                DATASETS["nfcorpus"]["sha256"],
+                doc_ids,
+                supervision_fingerprint,
+                top_branches,
+                leaf_size,
+            ],
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    prefix = runtime_root / "answer-taxonomy" / fingerprint
+    started = time.perf_counter()
+    cached = load_answer_taxonomy(prefix)
+    if cached:
+        tree, centroids = cached
+        if set(tree.get("assignments") or {}) == set(doc_ids):
+            return tree, centroids, {
+                "cache_hit": True,
+                "path": str(prefix.with_suffix(".json")),
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "top_node_count": tree["top_node_count"],
+                "leaf_node_count": tree["leaf_node_count"],
+                "item_count": tree["item_count"],
+                "supervised_query_count": tree.get("supervised_query_count", 0),
+                "supervision": "dev_query_plus_relevant_documents",
+            }
+
+    query_matrix = [dev_query_vectors[query_id] for query_id in dev_query_ids]
+    tree, centroids = build_answer_supervised_taxonomy(
+        corpus_vectors,
+        doc_ids,
+        query_matrix,
+        dev_query_ids,
+        dev_qrels,
+        top_branches=top_branches,
+        leaf_size=leaf_size,
+    )
+    tree.update(
+        {
+            "embedding_model": model,
+            "dataset": "nfcorpus",
+            "dataset_sha256": DATASETS["nfcorpus"]["sha256"],
+            "supervision_fingerprint": supervision_fingerprint,
+        }
+    )
+    save_answer_taxonomy(prefix, tree, centroids)
+    return tree, centroids, {
+        "cache_hit": False,
+        "path": str(prefix.with_suffix(".json")),
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+        "top_node_count": tree["top_node_count"],
+        "leaf_node_count": tree["leaf_node_count"],
+        "item_count": tree["item_count"],
+        "supervised_query_count": tree.get("supervised_query_count", 0),
+        "supervision": "dev_query_plus_relevant_documents",
+    }
+
+
 def vector_rank(
     query_vector: list[float],
     corpus_vectors: Any,
@@ -604,6 +704,45 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TAXONOMY_EXTRA_CANDIDATES,
     )
     parser.add_argument(
+        "--answer-taxonomy",
+        action="store_true",
+        help=(
+            "Learn an answer-supervised taxonomy from dev qrels and use it "
+            "for soft candidate expansion"
+        ),
+    )
+    parser.add_argument(
+        "--answer-taxonomy-top-branches",
+        type=int,
+        default=DEFAULT_ANSWER_TOP_BRANCHES,
+    )
+    parser.add_argument(
+        "--answer-taxonomy-leaf-size",
+        type=int,
+        default=DEFAULT_ANSWER_LEAF_SIZE,
+    )
+    parser.add_argument(
+        "--answer-taxonomy-route-leaves",
+        type=int,
+        default=DEFAULT_ANSWER_ROUTE_LEAVES,
+    )
+    parser.add_argument(
+        "--answer-taxonomy-min-items",
+        type=int,
+        default=DEFAULT_ANSWER_MIN_ITEMS,
+    )
+    parser.add_argument(
+        "--answer-taxonomy-extra-candidates",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--answer-taxonomy-route-weight",
+        type=float,
+        default=DEFAULT_ANSWER_ROUTE_WEIGHT,
+        help="Soft RRF weight for the answer-supervised routed ranking",
+    )
+    parser.add_argument(
         "--agentic",
         action="store_true",
         help="Enable multi-round LLM-planned local lexical retrieval before Jev",
@@ -657,12 +796,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    if not 1 <= args.top_k <= 100:
-        raise SystemExit("--top-k must be between 1 and 100")
+    if not 1 <= args.top_k <= 500:
+        raise SystemExit("--top-k must be between 1 and 500")
     if args.agentic_rounds < 1:
         raise SystemExit("--agentic-rounds must be positive")
-    if not 1 <= args.vector_top_k <= 100:
-        raise SystemExit("--vector-top-k must be between 1 and 100")
+    if not 1 <= args.vector_top_k <= 500:
+        raise SystemExit("--vector-top-k must be between 1 and 500")
     if args.rrf_k < 1:
         raise SystemExit("--rrf-k must be positive")
     if not 1 <= args.jev_batch_size <= 100:
@@ -701,12 +840,24 @@ def main() -> int:
         args.agentic or args.agentic_hybrid or args.line_search or args.passage_gate
     ):
         raise SystemExit("--taxonomy is a separate hybrid benchmark mode")
+    if args.answer_taxonomy and not args.agentic_hybrid:
+        raise SystemExit("--answer-taxonomy requires --agentic-hybrid")
+    if args.answer_taxonomy and args.taxonomy:
+        raise SystemExit("--answer-taxonomy and corpus-only --taxonomy are separate modes")
     if args.taxonomy_top_branches < 1 or args.taxonomy_leaf_size < 2:
         raise SystemExit("taxonomy branch counts must be positive and leaf size at least 2")
     if args.taxonomy_route_leaves < 1 or args.taxonomy_min_items < 1:
         raise SystemExit("taxonomy routing limits must be positive")
     if args.taxonomy_extra_candidates < 0:
         raise SystemExit("--taxonomy-extra-candidates cannot be negative")
+    if args.answer_taxonomy_top_branches < 1 or args.answer_taxonomy_leaf_size < 2:
+        raise SystemExit("answer taxonomy branch counts must be positive and leaf size at least 2")
+    if args.answer_taxonomy_route_leaves < 1 or args.answer_taxonomy_min_items < 1:
+        raise SystemExit("answer taxonomy routing limits must be positive")
+    if args.answer_taxonomy_extra_candidates < 0:
+        raise SystemExit("--answer-taxonomy-extra-candidates cannot be negative")
+    if args.answer_taxonomy_route_weight < 0:
+        raise SystemExit("--answer-taxonomy-route-weight must be non-negative")
     if args.limit_queries is not None and args.limit_queries < 1:
         raise SystemExit("--limit-queries must be positive")
 
@@ -720,7 +871,11 @@ def main() -> int:
     if args.limit_queries:
         query_ids = query_ids[: args.limit_queries]
     evaluation_depth = args.top_k + (
-        args.taxonomy_extra_candidates if args.taxonomy else 0
+        args.taxonomy_extra_candidates
+        if args.taxonomy
+        else args.answer_taxonomy_extra_candidates
+        if args.answer_taxonomy
+        else 0
     )
     cutoffs = sorted(
         {
@@ -744,6 +899,9 @@ def main() -> int:
     taxonomy_tree: dict[str, Any] | None = None
     taxonomy_centroids = None
     taxonomy_index: dict[str, Any] | None = None
+    answer_taxonomy_tree: dict[str, Any] | None = None
+    answer_taxonomy_centroids = None
+    answer_taxonomy_index: dict[str, Any] | None = None
     try:
         index_stats = kb.index("none")
         if args.line_search or args.passage_gate:
@@ -795,6 +953,32 @@ def main() -> int:
                         vector_doc_ids,
                         top_branches=args.taxonomy_top_branches,
                         leaf_size=args.taxonomy_leaf_size,
+                    )
+                )
+            if args.answer_taxonomy:
+                dev_qrels = load_qrels(dataset_root, "dev")
+                dev_query_ids = sorted(query_id for query_id in dev_qrels if query_id in queries)
+                dev_query_vectors, dev_query_meta = load_or_create_query_embeddings(
+                    runtime_root,
+                    args.embedding_model,
+                    dev_query_ids,
+                    queries,
+                    args.timeout,
+                )
+                for key, value in (dev_query_meta.get("usage") or {}).items():
+                    if isinstance(value, (int, float)):
+                        embedding_usage[key] = embedding_usage.get(key, 0.0) + float(value)
+                answer_taxonomy_tree, answer_taxonomy_centroids, answer_taxonomy_index = (
+                    load_or_create_answer_supervised_taxonomy(
+                        runtime_root,
+                        args.embedding_model,
+                        corpus_vectors,
+                        vector_doc_ids,
+                        dev_query_vectors,
+                        dev_query_ids,
+                        dev_qrels,
+                        top_branches=args.answer_taxonomy_top_branches,
+                        leaf_size=args.answer_taxonomy_leaf_size,
                     )
                 )
         for number, query_id in enumerate(query_ids, 1):
@@ -944,6 +1128,73 @@ def main() -> int:
                             "routed_vector_candidates": len(routed_dense_ids),
                         }
                     )
+                if args.answer_taxonomy:
+                    allowed_doc_ids, route_meta = route_answer_taxonomy(
+                        query_vectors_by_id[query_id],
+                        answer_taxonomy_tree,
+                        answer_taxonomy_centroids,
+                        route_leaves=args.answer_taxonomy_route_leaves,
+                        min_items=args.answer_taxonomy_min_items,
+                    )
+                    allowed_rowids = {
+                        int(documents_by_id[doc_id]["rowid"])
+                        for doc_id in allowed_doc_ids
+                        if doc_id in documents_by_id
+                    }
+                    try:
+                        routed_lexical = kb.lexical_search(
+                            query, args.top_k, allowed_rowids
+                        )
+                    except ValueError:
+                        routed_lexical = []
+                    routed_dense_ids = vector_rank(
+                        query_vectors_by_id[query_id],
+                        corpus_vectors,
+                        vector_doc_ids,
+                        args.vector_top_k,
+                        allowed_doc_ids,
+                    )
+                    routed_candidates = reciprocal_rank_fusion(
+                        routed_lexical,
+                        routed_dense_ids,
+                        documents_by_id,
+                        path_to_doc_id,
+                        args.top_k,
+                        args.rrf_k,
+                    )
+                    candidates = answer_taxonomy_rank_fusion(
+                        routed_candidates,
+                        candidates,
+                        id_key="path",
+                        limit=args.top_k,
+                        rrf_k=args.rrf_k,
+                        route_weight=args.answer_taxonomy_route_weight,
+                    )
+                    if args.answer_taxonomy_extra_candidates:
+                        candidates = answer_taxonomy_candidate_expansion(
+                            routed_candidates,
+                            candidates,
+                            id_key="path",
+                            extra_candidates=args.answer_taxonomy_extra_candidates,
+                        )
+                    labels = answer_taxonomy_tree.get("labels") or {}
+                    for item in candidates:
+                        doc_id = path_to_doc_id[item["path"]]
+                        memberships = answer_taxonomy_tree["assignments"].get(doc_id, [])
+                        item["answer_taxonomy_nodes"] = [
+                            labels.get(node_id, node_id) for node_id in memberships
+                        ]
+                        item["answer_taxonomy_routed"] = doc_id in allowed_doc_ids
+                    retrieval_meta.update(
+                        {
+                            "mode": "answer-supervised-taxonomy+agentic+bm25+embedding+rrf",
+                            "answer_taxonomy": route_meta,
+                            "answer_taxonomy_route_weight": args.answer_taxonomy_route_weight,
+                            "answer_taxonomy_extra_candidates": args.answer_taxonomy_extra_candidates,
+                            "routed_bm25_candidates": len(routed_lexical),
+                            "routed_vector_candidates": len(routed_dense_ids),
+                        }
+                    )
             retrieval_ranked_ids = [path_to_doc_id[item["path"]] for item in candidates]
             retrieval_metrics = metrics_for_query(
                 retrieval_ranked_ids, qrels[query_id], cutoffs
@@ -1044,6 +1295,10 @@ def main() -> int:
             if args.taxonomy and args.use_jev
             else "taxonomy+bm25+embedding+rrf"
             if args.taxonomy
+            else f"answer-supervised-taxonomy+agentic-hybrid+jev:{args.provider}"
+            if args.answer_taxonomy and args.use_jev
+            else "answer-supervised-taxonomy+agentic-hybrid"
+            if args.answer_taxonomy
             else f"agentic-{args.agentic_rounds}round+bm25+embedding+rrf+jev:{args.provider}"
             if args.agentic_hybrid and args.use_jev
             else f"agentic-{args.agentic_rounds}round+bm25+embedding+rrf"
@@ -1114,6 +1369,23 @@ def main() -> int:
                 "construction_uses_qrels": False,
             }
             if args.taxonomy
+            else None
+        ),
+        "answer_taxonomy": (
+            {
+                **(answer_taxonomy_index or {}),
+                "top_branches": args.answer_taxonomy_top_branches,
+                "leaf_size": args.answer_taxonomy_leaf_size,
+                "route_leaves": args.answer_taxonomy_route_leaves,
+                "min_items": args.answer_taxonomy_min_items,
+                "extra_candidates": args.answer_taxonomy_extra_candidates,
+                "route_weight": args.answer_taxonomy_route_weight,
+                "construction_uses_dev_queries": True,
+                "construction_uses_dev_qrels": True,
+                "construction_uses_test_queries": False,
+                "construction_uses_test_qrels": False,
+            }
+            if args.answer_taxonomy
             else None
         ),
         "passage_gate_routes": (
