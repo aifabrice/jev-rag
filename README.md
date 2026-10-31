@@ -71,6 +71,25 @@ If the reproducible results or local-first approach are useful to you, [star
 Jev RAG on GitHub](https://github.com/aifabrice/jev-rag/stargazers) so other
 developers can find the project.
 
+## Install the v0.7.0 release
+
+For a reproducible checkout of the current release, pin the tag before creating
+the environment:
+
+```bash
+git clone --branch v0.7.0 --depth 1 https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[documents]'
+```
+
+Add `.[documents,embeddings]` only when you want the optional hybrid and
+taxonomy paths. The default BM25 + Jev path does not require embeddings or a
+vector database. Configure `OPENROUTER_API_KEY` in `.env` for the full
+answering flow, and add `TYPESAFE_API_KEY` only when using direct Jev access.
+
 ## Public benchmark
 
 Complete BEIR NFCorpus test split: 3,633 documents and 323 queries. All rows

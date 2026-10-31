@@ -2,53 +2,22 @@
 
 All notable changes are documented here. The project follows Semantic Versioning after the initial alpha series.
 
-## [Unreleased]
+## [0.7.0] - 2026-10-31
 
-### Changed
+This release consolidates the seventh retrieval pipeline and the reliability,
+security, benchmark, and documentation work that landed on `main` after the
+initial alpha series. The default UI remains the smaller BM25/embedding
+candidate pool; high-recall and deep-search variants are explicit experiments.
 
-- Persist exact query embeddings by query and model so repeated Hybrid runs
-  skip a redundant provider request without changing vectors or rankings.
-- Generalize Agentic retrieval from a fixed two/three-round implementation to
-  any positive configured round count while keeping two as the default.
-- Allow the benchmark runner and Agentic retrieval branch to evaluate candidate
-  pools up to 500 items, enabling the published top-200 high-recall operating
-  point without changing the default UI limits.
+### Highlights
 
-### Security
-
-- Ignore document symlinks whose resolved target is outside the selected
-  knowledge root, preventing accidental indexing of unrelated local files.
-- Pin every GitHub Action to a full commit SHA while retaining the upstream
-  major version in a comment for Dependabot updates.
-- Add weekly dependency update checks for Python packages and GitHub Actions,
-  plus repository-wide CODEOWNERS coverage.
-- Keep secret-scanner failure output aggregate-only so CI logs never echo
-  data derived from a secret-bearing line.
-
-### Fixed
-
-- Rebuild the index when its configured document root changes, and reject
-  stale-root searches when automatic indexing is disabled.
-- Treat an answer stream that closes without a provider completion signal as
-  an error instead of recording a partial answer as successful.
-- Install the embedding extra in CI so the taxonomy test suite has NumPy on
-  every supported Python version.
-- Compile `taxonomy.py` explicitly during the CI bytecode validation step.
-
-### Benchmark
-
-- The high-recall Agentic Hybrid benchmark variant (BM25 + embedding top 200,
-  Jev batches of 100) reached `0.466171` nDCG@10 on the full 323-query
-  NFCorpus test split. The quality run recorded 3.05 s median and 4.24 s p95
-  with `$1.421625` provider cost; a unified cold audit measured 6.52 s median
-  and 7.90 s p95 because the quality run had cache hits. This is documented as
-  a benchmark operating point; the default UI remains the smaller candidate
-  pool.
-- Added a unified 10-query cold latency audit with cache state, stage breakdown,
-  and comparable median/p95 values in
-  `benchmarks/nfcorpus-pipeline-latency-audit10-summary.json`.
-
-## [0.7.0] - 2026-09-27
+- Seven selectable retrieval paths: BM25 + Jev, agentic lexical search,
+  embedding hybrid, multi-round Agentic Hybrid, taxonomy routing, unified Jev
+  Passage Gate, and hierarchical Jev Line Search.
+- A reproducible no-key BM25 quickstart, a local web UI with streaming cited
+  answers, and English/Chinese tutorials and project pages.
+- Full BEIR NFCorpus reporting on 3,633 documents and 323 queries, including
+  quality, latency, cost, cache state, and negative-result disclosures.
 
 ### Added
 
@@ -73,6 +42,12 @@ All notable changes are documented here. The project follows Semantic Versioning
 - The default Agentic-Hybrid fusion weight is `0.65:1.0` for Agentic versus
   dense retrieval, selected on the NFCorpus dev split before one fixed test
   evaluation.
+- Persist exact query embeddings by query and model so repeated Hybrid runs
+  skip a redundant provider request without changing vectors or rankings.
+- Generalize Agentic retrieval to any positive configured round count while
+  keeping two rounds as the default.
+- Allow benchmark and Agentic branches to evaluate candidate pools up to 500,
+  enabling the published top-200 high-recall operating point.
 
 ### Benchmark
 
@@ -88,6 +63,35 @@ All notable changes are documented here. The project follows Semantic Versioning
   `0.450750` nDCG@10 without another provider call. Its paired 20,000-sample
   bootstrap delta interval versus Jev-only ordering was
   `[0.000397, 0.009757]`.
+- The high-recall Agentic Hybrid variant (BM25 + embedding top 200, Jev batches
+  of 100) reached `0.466171` nDCG@10, `0.669516` MRR@10, and `0.228912`
+  Recall@10. The quality run recorded 3.05 s median, 4.24 s p95, and
+  `$1.421625` provider cost; a unified cold audit measured 6.52 s median and
+  7.90 s p95 because the quality run had cache hits.
+- Added `benchmarks/nfcorpus-pipeline-latency-audit10-summary.json` with a
+  unified 10-query cold latency audit, cache state, and stage breakdown.
+
+### Reliability and security
+
+- Rebuild the index when its configured document root changes and reject
+  stale-root searches when automatic indexing is disabled.
+- Treat an answer stream that closes without a provider completion signal as an
+  error instead of recording a partial answer as successful.
+- Ignore document symlinks whose resolved target is outside the selected
+  knowledge root.
+- Pin every GitHub Action to a full commit SHA, add weekly dependency checks
+  and repository-wide CODEOWNERS coverage, and keep secret-scanner output
+  aggregate-only.
+- Install the embedding extra in CI and compile `taxonomy.py` explicitly
+  during bytecode validation.
+
+### Documentation and reproducibility
+
+- Publish architecture, seven-pipeline, FAQ, benchmark, latency, and
+  contribution guides with machine-readable benchmark artifacts.
+- Keep the benchmark honest about provider-dependent latency, cold versus
+  cached runs, experimental modes, and the boundary between local retrieval
+  and remote Jev/answer-provider calls.
 
 ## [0.6.0] - 2026-09-27
 

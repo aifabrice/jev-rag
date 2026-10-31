@@ -176,6 +176,22 @@ TYPESAFE_API_KEY=
 
 默认端到端流程只需要 `OPENROUTER_API_KEY`。`.env` 已被 Git 忽略；如果密钥曾被公开，必须立即撤销并重新创建。
 
+### 安装 v0.7.0 发布版本
+
+如果希望复现当前发布版本，可以先固定 `v0.7.0` 标签：
+
+```bash
+git clone --branch v0.7.0 --depth 1 https://github.com/aifabrice/jev-rag.git
+cd jev-rag
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[documents]'
+```
+
+只有需要混合检索或知识分类树时，才额外安装 `.[documents,embeddings]`。
+默认 BM25 + Jev 路径不需要 Embedding 或向量数据库。
+
 ## 快速开始
 
 默认会自动发现并索引当前用户的 `~/Documents`（macOS 的“文稿”、
