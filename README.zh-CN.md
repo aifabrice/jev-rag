@@ -9,6 +9,8 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
 
+**第一次来？** [先看无 Key 演示](https://aifabrice.github.io/jev-rag/zh/jev-rag-guide.html) · [在 GitHub 点 Star](https://github.com/aifabrice/jev-rag/stargazers) · [Fork 项目](https://github.com/aifabrice/jev-rag/fork) · [参与贡献](CONTRIBUTING.md)
+
 [English](README.md) · [中文技术文章](docs/CONTENT_SERIES_ZH.md) · [架构](docs/ARCHITECTURE.md) · [安全说明](SECURITY.md) · [参与贡献](CONTRIBUTING.md)
 
 **[中文项目介绍 →](https://aifabrice.github.io/jev-rag/zh/)**

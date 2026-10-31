@@ -14,6 +14,8 @@ passages are sent to the configured Jev and answer-model providers.
 [![License: MIT](https://img.shields.io/badge/license-MIT-17624f)](LICENSE)
 [Listed in Awesome Jev](https://github.com/yibie/awesome-jev)
 
+**New here?** [Try the no-key demo](#try-local-search-without-an-api-key) · [Star on GitHub](https://github.com/aifabrice/jev-rag/stargazers) · [Fork the project](https://github.com/aifabrice/jev-rag/fork) · [Contribute](CONTRIBUTING.md)
+
 [简体中文](README.zh-CN.md) · [Seven-pipeline field report](docs/JEV_RAG_SEVEN_PIPELINES.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
 **[Project website and interactive benchmark →](https://aifabrice.github.io/jev-rag/)**
