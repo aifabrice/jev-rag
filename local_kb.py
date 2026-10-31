@@ -52,7 +52,7 @@ from taxonomy import (
 )
 
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.4.0"
 DEFAULT_GENERATOR_MODEL = "minimax/minimax-m3"
 DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-large"
 DEFAULT_RETRIEVAL_MODE = "bm25"

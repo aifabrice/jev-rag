@@ -2,7 +2,7 @@
   "benchmark": "BEIR NFCorpus",
   "split": "test",
   "date": "2026-09-27",
-  "version": "0.7.0",
+  "version": "0.4.0",
   "queries": 323,
   "documents": 3633,
   "dataset_sha256": "efe5be03f8c5b86a5870102d0599d227c8c6e2484328e68c6522560385671b0b",

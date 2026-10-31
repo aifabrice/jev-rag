@@ -11,8 +11,8 @@ authors:
 repository-code: "https://github.com/aifabrice/jev-rag"
 url: "https://aifabrice.github.io/jev-rag/"
 license: MIT
-version: "0.7.0"
-date-released: 2026-10-02
+version: "0.4.0"
+date-released: 2026-10-31
 keywords:
   - Jev
   - RAG

@@ -71,13 +71,13 @@ If the reproducible results or local-first approach are useful to you, [star
 Jev RAG on GitHub](https://github.com/aifabrice/jev-rag/stargazers) so other
 developers can find the project.
 
-## Install the v0.7.0 release
+## Install the v0.4.0 release
 
 For a reproducible checkout of the current release, pin the tag before creating
 the environment:
 
 ```bash
-git clone --branch v0.7.0 --depth 1 https://github.com/aifabrice/jev-rag.git
+git clone --branch v0.4.0 --depth 1 https://github.com/aifabrice/jev-rag.git
 cd jev-rag
 python3 -m venv .venv
 source .venv/bin/activate

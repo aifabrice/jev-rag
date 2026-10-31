@@ -2,12 +2,17 @@
 
 All notable changes are documented here. The project follows Semantic Versioning after the initial alpha series.
 
-## [0.7.0] - 2026-10-31
+## [0.4.0] - 2026-10-31
 
-This release consolidates the seventh retrieval pipeline and the reliability,
-security, benchmark, and documentation work that landed on `main` after the
-initial alpha series. The default UI remains the smaller BM25/embedding
-candidate pool; high-recall and deep-search variants are explicit experiments.
+This is the first public release after `v0.3.0`. It consolidates the internal
+0.4–0.7 development milestones, including the additional retrieval pipelines,
+reliability, security, benchmark, and documentation work that landed on `main`.
+The default UI remains the smaller BM25/embedding candidate pool; high-recall
+and deep-search variants are explicit experiments.
+
+The public release sequence is therefore `v0.2.0` → `v0.3.0` → `v0.4.0`.
+The intermediate milestone numbers were never published as Git tags or GitHub
+Releases.
 
 ### Highlights
 
@@ -92,61 +97,6 @@ candidate pool; high-recall and deep-search variants are explicit experiments.
 - Keep the benchmark honest about provider-dependent latency, cold versus
   cached runs, experimental modes, and the boundary between local retrieval
   and remote Jev/answer-provider calls.
-
-## [0.6.0] - 2026-09-27
-
-### Added
-
-- An experimental sixth `taxonomy` mode that builds a deterministic two-level
-  corpus taxonomy from cached embeddings, routes each query to relevant leaf
-  nodes, and appends up to 20 unique node-local candidates to the unchanged
-  Hybrid top-50 pool before ordinary Jev reranking.
-- Persistent JSON/NPZ taxonomy caches, readable node labels, primary and
-  near-boundary secondary document assignments, UI/CLI timing, and benchmark
-  controls. Taxonomy construction uses corpus documents only, never benchmark
-  queries or relevance judgments.
-- Complete BEIR NFCorpus disclosure: taxonomy expansion increased candidate
-  recall from 0.318075 at 50 to 0.342964 at 70, but final nDCG@10 was 0.441851,
-  slightly below Hybrid + Jev at 0.444327. The mode remains experimental and
-  is not the default.
-
-### Changed
-
-- Jev reranking can execute up to eight independent ten-candidate batches in
-  parallel, reducing the extra wait introduced by 70-candidate taxonomy pools.
-
-## [0.5.0] - 2026-09-27
-
-### Added
-
-- A fifth `hybrid-gate` mode: BM25 top 50 and embedding top 50 are fused with
-  RRF, then one unified Jev stage evaluates relevance, usable answer evidence,
-  contradiction of a query premise, and prompt injection for every candidate.
-- Official-cookbook-inspired routing with separate normal and conflicting
-  evidence blocks for answer generation, plus prompt-injection exclusion.
-- CLI, HTTP, web UI, cache, benchmark, latency, route-count, and cost support
-  for the unified Passage Gate.
-- Complete 323-query BEIR NFCorpus disclosure. The fixed gate scored 0.376298
-  nDCG@10 versus 0.396712 for bare Hybrid and 0.444327 for Hybrid + Jev, while
-  excluding 84.4% of candidates; it is therefore experimental and not default.
-
-## [0.4.0] - 2026-09-27
-
-### Added
-
-- A fourth `line-search` retrieval mode based on TypeSafe's Line-by-line Search
-  cookbook: indexed passages are partitioned into windows of at most 255,
-  every window is searched concurrently with Jev Choice + Noul, and a second
-  Choice request globally ranks the window finalists.
-- Configurable window size, finalists per window, local caching, per-stage
-  latency/cost metadata, CLI support, HTTP support, and a web UI selector for
-  two-level Line Search.
-- Capacity checks for the two-level `255 × 255 = 65,025` passage hierarchy and
-  explicit documentation of its cost and remote-data boundary.
-- Complete 323-query BEIR NFCorpus Line Search results, including first-hit,
-  ranking, recall, provider usage, cost, latency caveats, and reproduction data.
-- Per-window cache persistence so successful parallel stages survive a sibling
-  timeout or connection failure and a resumed benchmark only retries misses.
 
 ## [0.3.0] - 2026-09-26
 

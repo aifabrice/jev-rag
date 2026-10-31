@@ -7,7 +7,7 @@ OpenRouter.
 ## Run configuration
 
 - Date: 2026-09-26
-- Report version: Jev RAG 0.7.0 (individual experiments below record their
+- Report version: Jev RAG 0.4.0 (individual experiments below record their
   implementation version)
 - Corpus: 3,633 documents
 - Test queries: 323
@@ -182,7 +182,7 @@ The compact machine-readable disclosure is stored in
 
 ## Multi-round Agentic Hybrid experiment
 
-Version 0.7.0 combines the two-round Agentic lexical branch with dense
+Version 0.4.0 combines the two-round Agentic lexical branch with dense
 retrieval. For each query, MiniMax plans five lexical searches in round one and
 five follow-up searches after inspecting up to eight first-round snippets. The
 original query and generated searches run against local BM25; in the
