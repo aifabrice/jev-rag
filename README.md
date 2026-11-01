@@ -153,12 +153,25 @@ best run used 50 candidates and Jev batches of 10; the high-recall run uses
 quality delta should therefore be attributed to this configuration, not to
 candidate depth alone.
 
-On the [MTEB NFCorpus page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
-observed on 2026-09-26, inserting `0.466171` numerically would move this run
-above the previous `0.450750` project result in that snapshot. This is an
-**unofficial comparison**, not an MTEB leaderboard rank: the multi-stage
-pipeline has not been submitted to MTEB, and the result is a project-run
-evaluation on the same test set.
+### MTEB NFCorpus context (snapshot: 2026-11-01)
+
+MTEB means **Massive Text Embedding Benchmark**. The relevant public task is
+[MTEB NFCorpus](https://leaderboard.mteb.org/tasks/NFCorpus), a Retrieval task
+whose main metric is `nDCG@10`; the project evaluates the complete BEIR
+NFCorpus test split and uses the same metric name. The public task snapshot
+contained 258 visible model rows. Its top three scores were `0.557450`,
+`0.469900`, and `0.449650` (the read-only [scores snapshot](https://mteb-leaderboard-backend.hf.space/v1/tasks/NFCorpus/scores)
+is provided for reproducibility).
+
+If this project's high-recall Agentic Hybrid score (`0.466171`) were inserted
+into that snapshot by numeric value, only two visible scores would be higher,
+so it would land at a **hypothetical #3 of 259**. This is a numerical
+comparison, **not an official MTEB Top 3 or MTEB rank**. Jev RAG is a
+multi-stage BM25 + embedding retrieval + Jev reranking + local rank-fusion
+pipeline, not a single embedding model; this run is project-run, depends on
+remote providers, and has not been submitted or validated through the MTEB
+submission process. The leaderboard can also change, so keep the claim tied to
+the dated snapshot rather than presenting it as a permanent rank.
 
 [Full results, exact configuration, cost, caveats, and reproduction commands](benchmarks/NFCORPUS_RESULTS.md)
 · [Machine-readable Agentic summary](benchmarks/nfcorpus-agentic-summary.json)

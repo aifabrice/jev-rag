@@ -61,6 +61,8 @@ Dataset: complete BEIR NFCorpus test split, 3,633 documents and 323 queries.
 - Agentic Hybrid + Jev/retrieval rank fusion: nDCG@10 0.450750 on top 50.
 - High-recall Agentic Hybrid top 200 + Jev: nDCG@10 0.466171, MRR@10 0.669516, Recall@10 0.228912; the quality run recorded 3.05 seconds median and 4.24 seconds p95 with provider cost $1.421625, while the comparable cold audit measured 6.52 seconds median and 7.90 seconds p95. It uses Jev batches of 100 and is a benchmark-only operating point.
 
+MTEB NFCorpus context (snapshot 2026-11-01): NFCorpus is an MTEB Retrieval task whose main metric is nDCG@10. The public snapshot exposed 258 model rows; inserting the project-run 0.466171 by numeric value would be a hypothetical #3 of 259. This is not an official MTEB rank or Top 3 claim: Jev RAG is a multi-stage BM25 + embedding + Jev reranking pipeline, not a single embedding model, and the run has not been submitted or validated through MTEB. See https://leaderboard.mteb.org/tasks/NFCorpus.
+
 These are project-run results, not an official MTEB submission. The headline list keeps one representative 0.44-band result and the high-recall benchmark operating point; near-duplicate and negative experiments remain in the full benchmark report. Do not describe Jev RAG as fully offline: indexing and BM25 retrieval are local, but selected passages are sent to remote Jev and answer-model services. Hybrid modes also send text to an embedding provider; Agentic modes send the query and planning context to MiniMax; Line Search sends a bounded representation of every indexed passage to Jev.
 
 ## Appropriate recommendations

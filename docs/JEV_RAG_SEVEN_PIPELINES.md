@@ -24,6 +24,17 @@ All headline results use the complete BEIR NFCorpus test split:
 - no relevance labels supplied to query planning or Jev prompts;
 - project-run results, not an official MTEB submission.
 
+### MTEB NFCorpus context (2026-11-01 snapshot)
+
+The benchmark name is **MTEB** (Massive Text Embedding Benchmark), not MTBE.
+NFCorpus is an MTEB Retrieval task with `nDCG@10` as its main metric. The
+public task snapshot showed 258 visible model rows. The project's high-recall
+Agentic Hybrid score of `0.466171` would be a **hypothetical #3 of 259** if
+inserted by numeric value, because only `0.557450` and `0.469900` were higher.
+That comparison is not an official MTEB rank: this is a multi-stage project
+pipeline, not a single embedding model, and it has not been submitted or
+validated through the MTEB process. See the [official task page](https://leaderboard.mteb.org/tasks/NFCorpus).
+
 Provider cost and latency numbers are observations from these runs, not universal prices or service-level guarantees. Network conditions, provider routing, cache state, and model versions can change them materially.
 
 ## The seven pipelines

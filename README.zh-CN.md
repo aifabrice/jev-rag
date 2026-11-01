@@ -63,9 +63,20 @@ Hybrid 和当前最高分方案。
 最佳结果使用 Top 50 和每批 10 个候选；这次使用 Top 200 和每批 100 个候选，
 因此提升应归因于完整配置，不能只归因于候选数量。
 
-以 2026-09-26 查看到的 [MTEB NFCorpus 页面](https://mteb-leaderboard.hf.space/tasks/NFCorpus)数值进行插入比较，
-`0.466171` 在该快照中会高于之前项目的 `0.450750`。这是一个**非官方的数值比较**，
-不是 MTEB 官方榜单排名：这套多阶段方案尚未提交 MTEB，而且结果是项目在同一测试集上的运行。
+### MTEB NFCorpus 榜单语境（2026-11-01 快照）
+
+MTEB 的全称是 **Massive Text Embedding Benchmark**。这里对应的是
+[MTEB NFCorpus](https://leaderboard.mteb.org/tasks/NFCorpus) 的 Retrieval 任务，
+主指标是 `nDCG@10`；项目使用完整 BEIR NFCorpus 测试集，并按同名指标自测。
+该公开任务快照显示 258 条模型结果，前三个分数为 `0.557450`、`0.469900`、
+`0.449650`（可查看只读的 [scores 快照](https://mteb-leaderboard-backend.hf.space/v1/tasks/NFCorpus/scores)）。
+
+如果把本项目高召回 Agentic Hybrid 的 `0.466171` 按数值插入这个快照，只有两个
+公开分数高于它，因此位置会是**假设第 3 / 259**。这只是数值比较，**不是 MTEB
+官方 Top 3，也不是已经获得的 MTEB 排名**。Jev RAG 是 BM25 + Embedding 召回 +
+Jev 重排 + 本地排名融合的多阶段流程，不是单一 Embedding 模型；这次结果是项目
+自行运行、依赖远程服务，尚未按 MTEB 流程提交和验证。榜单会变化，所以宣传时必须
+带上日期和“假设插入”的限定。
 
 [完整结果、精确配置、费用、局限和复现命令](benchmarks/NFCORPUS_RESULTS.md)
 · [Agentic 机器可读结果](benchmarks/nfcorpus-agentic-summary.json)

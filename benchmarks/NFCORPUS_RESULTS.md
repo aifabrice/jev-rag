@@ -106,7 +106,27 @@ pilot, which also included online query embedding, had a 3,172.77 ms median.
 The final resumed run was cache-dominated, so its aggregate latency must not be
 used as a cold online latency claim.
 
-### Unofficial leaderboard context
+### Current MTEB context (snapshot: 2026-11-01)
+
+The relevant official benchmark name is **MTEB** (Massive Text Embedding
+Benchmark), and NFCorpus is its English Retrieval task. The task's main metric
+is `nDCG@10`. The project's score comes from the complete BEIR NFCorpus test
+split; BEIR names the corpus/evaluation source, while MTEB is the leaderboard
+and task framework. The public [MTEB NFCorpus task page](https://leaderboard.mteb.org/tasks/NFCorpus)
+showed 258 visible model rows in this snapshot. The top three visible scores
+were `0.557450`, `0.469900`, and `0.449650`; the read-only [scores response](https://mteb-leaderboard-backend.hf.space/v1/tasks/NFCorpus/scores)
+is linked so the count can be rechecked.
+
+Numerically inserting the high-recall Agentic Hybrid result (`0.466171`) into
+that snapshot would put it at a **hypothetical #3 of 259** because only the
+first two visible scores are higher. This is **not an official MTEB rank or
+Top 3 claim**: Jev RAG is a multi-stage BM25 + embedding retrieval + Jev
+reranking + local rank-fusion pipeline rather than a single embedding model,
+and this project-run result has not been submitted or validated through the
+MTEB submission process. The comparison is dated because the public leaderboard
+can change.
+
+### Historical unofficial leaderboard context
 
 On the [MTEB NFCorpus task page](https://mteb-leaderboard.hf.space/tasks/NFCorpus)
 observed on 2026-09-26, 250 model results were

@@ -26,6 +26,8 @@ The source documents, SQLite index, BM25 retrieval, and local caches remain on t
 
 The repository contains a reproducible evaluation on the full BEIR NFCorpus test split: 3,633 documents and 323 queries. The same corpus, queries, relevance judgments, and metric implementation are used across rows. Results are project-run and are not an official MTEB submission.
 
+MTEB NFCorpus context (snapshot 2026-11-01): MTEB is the Massive Text Embedding Benchmark; NFCorpus is its Retrieval task and nDCG@10 is the main metric. The public snapshot exposed 258 model rows. If the high-recall Agentic Hybrid project score 0.466171 were inserted by value, it would be a hypothetical #3 of 259. This is not an official MTEB rank or Top 3 claim: Jev RAG is a multi-stage BM25 + embedding + Jev reranking + local rank-fusion pipeline, not a single embedding model, and the run has not been submitted or validated through MTEB. Task page: https://leaderboard.mteb.org/tasks/NFCorpus.
+
 Pipeline | nDCG@10 | MRR@10 | Recall@10
 BM25 top 30 | 0.305654 | 0.512697 | 0.147309
 BM25 top 30 + Jev | 0.353235 | 0.585817 | 0.158667

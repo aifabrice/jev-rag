@@ -52,6 +52,7 @@
           <p class="kicker">Evaluation setup</p>
           <h2>One corpus, one protocol.</h2>
           <p>Every headline result uses the complete BEIR NFCorpus test split: 3,633 documents, 323 test queries, the same qrels, and the same metric implementation. Candidate depths and remote stages are disclosed. These are project-run results, not an official MTEB submission.</p>
+          <p class="source-note"><strong>MTEB context (2026-11-01):</strong> NFCorpus is an MTEB Retrieval task whose main metric is nDCG@10. The public snapshot showed 258 model rows; inserting this project's 0.466171 numerically would be a <strong>hypothetical #3 of 259</strong>. It is not an official MTEB Top 3: Jev RAG is a multi-stage pipeline, and this run has not been submitted or validated through MTEB. <a href="https://leaderboard.mteb.org/tasks/NFCorpus">Open the task page →</a></p>
           <p class="source-note"><strong>The central lesson:</strong> retrieval, judgment, ranking policy, and generation are separate layers. A reranker can reorder candidates, but it cannot recover evidence that the first stage never retrieved.</p>
         </section>
 
