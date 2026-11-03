@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev RAG benchmark explorer</title>
+    <meta name="description" content="A no-key benchmark explorer for BM25, agentic search, hybrid retrieval, and Jev reranking." />
+    <style>
+      :root { color-scheme: dark; --bg: #091313; --panel: #102020; --line: #26413d; --text: #eff8f4; --muted: #a8c4bd; --accent: #9ff0c9; --accent-2: #80b7ff; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: radial-gradient(circle at 85% 0%, #173a35 0, transparent 38rem), var(--bg); }
+      main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0 80px; }
+      a { color: var(--accent); }
+      .eyebrow { color: var(--accent); letter-spacing: .16em; text-transform: uppercase; font-size: .78rem; font-weight: 700; }
+      h1 { max-width: 760px; margin: 12px 0 18px; font-size: clamp(2.5rem, 7vw, 5.7rem); line-height: .98; letter-spacing: -.06em; }
+      .lede { max-width: 760px; color: var(--muted); font-size: 1.18rem; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 30px 0 44px; }
+      .button { display: inline-flex; align-items: center; padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); text-decoration: none; background: #142a28; }
+      .button.primary { color: #09201a; background: var(--accent); border-color: var(--accent); font-weight: 800; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 26px 0 44px; }
+      .stat, .panel { border: 1px solid var(--line); border-radius: 18px; background: color-mix(in srgb, var(--panel) 90%, transparent); }
+      .stat { padding: 18px; }
+      .stat strong { display: block; font-size: 2rem; color: var(--accent); }
+      .stat span { color: var(--muted); font-size: .9rem; }
+      .panel { padding: 24px; margin-top: 18px; }
+      h2 { margin-top: 0; font-size: 1.45rem; }
+      table { width: 100%; border-collapse: collapse; font-size: .94rem; }
+      th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+      th { color: var(--muted); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
+      td:nth-child(n+2), th:nth-child(n+2) { text-align: right; }
+      tr.best td { color: var(--accent); font-weight: 800; }
+      .note { color: var(--muted); font-size: .92rem; }
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      code { padding: 2px 5px; border-radius: 5px; background: #18302d; color: var(--accent); }
+      @media (max-width: 760px) { main { width: min(100% - 24px, 680px); padding-top: 32px; } .grid, .split { grid-template-columns: 1fr 1fr; } table { font-size: .82rem; } th, td { padding: 9px 5px; } }
+      @media (max-width: 480px) { .grid, .split { grid-template-columns: 1fr; } h1 { font-size: 3rem; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Jev RAG · benchmark explorer</div>
+      <h1>What does Jev add after retrieval?</h1>
+      <p class="lede">A reproducible comparison of local BM25, agentic lexical search, embedding hybrid retrieval, and Jev reranking. No API key or backend is required for this explorer.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/aifabrice/jev-rag">Open the repository</a>
+        <a class="button" href="https://aifabrice.github.io/jev-rag/how-to-use-jev-for-rag.html">Read the tutorial</a>
+        <a class="button" href="https://leaderboard.mteb.org/tasks/NFCorpus">Compare MTEB task</a>
+      </div>
+
+      <div class="grid">
+        <div class="stat"><strong>3,633</strong><span>NFCorpus documents</span></div>
+        <div class="stat"><strong>323</strong><span>test queries</span></div>
+        <div class="stat"><strong>0.466171</strong><span>highest project nDCG@10</span></div>
+        <div class="stat"><strong>7</strong><span>selectable retrieval paths</span></div>
+      </div>
+
+      <section class="panel">
+        <h2>Measured retrieval quality</h2>
+        <table>
+          <thead><tr><th>Pipeline</th><th>nDCG@10</th><th>MRR@10</th><th>Recall@10</th></tr></thead>
+          <tbody>
+            <tr><td>BM25 top 30</td><td>0.305654</td><td>0.512697</td><td>0.147309</td></tr>
+            <tr><td>BM25 top 30 + Jev</td><td>0.353235</td><td>0.585817</td><td>0.158667</td></tr>
+            <tr><td>Agentic lexical top 50 + Jev</td><td>0.430969</td><td>0.644041</td><td>0.204138</td></tr>
+            <tr><td>Hybrid top 50 + Jev</td><td>0.444327</td><td>0.654583</td><td>0.214907</td></tr>
+            <tr class="best"><td>Agentic Hybrid high-recall top 200 + Jev</td><td>0.466171</td><td>0.669516</td><td>0.228912</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Complete BEIR NFCorpus test split. All rows share the same corpus, queries, qrels, and metric implementation.</p>
+      </section>
+
+      <div class="split">
+        <section class="panel">
+          <h2>What changed?</h2>
+          <p>Jev improves the order of a bounded candidate set. Agentic query expansion and hybrid retrieval widen that set first. The high-recall operating point uses 200 candidates from both retrieval branches, then Jev batches of 100 followed by local rank fusion.</p>
+        </section>
+        <section class="panel">
+          <h2>Read the result carefully</h2>
+          <p>The numbers are project-run results, not an official MTEB submission. In the 2026-11-01 public NFCorpus snapshot, inserting <code>0.466171</code> numerically would be a hypothetical #3 of 259, not an official MTEB rank.</p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h2>Run it locally</h2>
+        <p>Jev RAG defaults to local SQLite FTS5/BM25 and does not need embeddings or a vector database. Try the no-key baseline first, then compare the provider-backed reranking paths on your own documents.</p>
+        <p><code>git clone https://github.com/aifabrice/jev-rag.git</code></p>
+        <p><a href="https://github.com/aifabrice/jev-rag/blob/main/benchmarks/NFCORPUS_RESULTS.md">Full benchmark report →</a> · <a href="https://github.com/aifabrice/jev-rag">Fork the project →</a></p>
+      </section>
+    </main>
+  </body>
+</html>
