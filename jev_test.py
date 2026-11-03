@@ -155,6 +155,12 @@ def selected_providers(value: str) -> list[str]:
 
 
 def main() -> int:
+    # Windows PowerShell may start Python with a legacy console encoding.
+    # Keep the CLI's structured output usable when the built-in example is non-ASCII.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="本地测试 Jev（OpenRouter / TypeSafe 官方 API）")
     parser.add_argument("--provider", choices=["auto", "openrouter", "typesafe", "both"], default="auto")
     parser.add_argument("--text", help="要评估的文本；省略时使用内置示例")
